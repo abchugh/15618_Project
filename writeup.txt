@@ -1,0 +1,43 @@
+Implemented the basic ray tracing algorithm with following components:
+1. 	Intersection tests for Sphere, Triangle, Model with given ray
+	The general hit testing function signature is:
+	hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord);
+	
+	hitRecord is a structure as shown below:
+	struct hitRecord
+	{
+		//direction of normal of the object where the ray hits
+		Vector3 n;
+		//The parameter 't' of the ray when it hits an object
+		real_t t;
+		//Properties of the material of the object that was hit - ambient, diffuse, specular & texColor with refractive index.
+		MaterialProp mp;
+	};
+	
+2. 	Implementation of the eye ray, shadow ray, reflected ray & refracted ray
+	The main function that does the runs the ray tracing algorithm is "GetColor"
+	This function is called recursively for reflected and refracted rays.
+	The refractive index stack is also passed along this function.
+
+3.	Implemented Bounding Volume hierarchy data structure for fast ray tracing.
+	The whole scene has 1 bvh that has models, triangles and spheres as primitives. Each model has its own BVH having triangles as primitives.
+	Used Surface Area Heuristic to determine which axis to split. (in bvh.hpp/cpp)
+	I later started checking each vertex location as a potential boundary but it took a long while to initialise, so I commented out that code.
+
+4. Implemented animations
+	Click space in a model that has meshes. (cube.scene & toy.scene are good for this).
+	Moves around meshes in a predetermined fashion.
+	
+	Additionally interfaced key clicks to move the meshes. 
+	[ Suggestion: See the animations in OpenGL or in a very small window. It works in both modes but my ray tracing code is too slow.]
+	Uses the arrow keys to drive the cube like a car in cube.scene.
+	Use the keys i,j,k,l to rotate in the other directions. Good for maneuverin the plane in toy.scene
+
+5. Implemented mouse click
+	LEFT CLICK
+		Moves the clicked object 1 unit in the orientation direction.
+	RIGHT CLICK
+		Moves the clicked object 1 unit in the direction opposite to the orientation.
+		
+6. Implemented Glossy reflections.
+	Use -g <number> to enter number of reflected rays to be used.

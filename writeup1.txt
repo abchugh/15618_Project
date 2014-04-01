@@ -1,0 +1,8 @@
+color.hpp		division operator
+matrix.cpp/hpp	code for solving linear systems
+vector.hpp 		const real_t BIG_NUMBER = 1e30;
+main.cpp		init geometry
+raytracer.cpp	called scene::getColor to get color of the ray traced
+material.hpp	structure MaterialProp for storing material info from intersection test
+model.cpp		initGeometry, hit
+ray.cpp			transform w.r.t matrix
