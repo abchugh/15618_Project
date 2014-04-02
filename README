@@ -55,7 +55,7 @@ cmake -DCMAKE_BUILD_TYPE=Release ../src
 
 ***************
 
-WINDOWS NOTE: If you're using Windows, you'll have to add the "windows/bin"
+WINDOWS NOTE: If you're using Windows, you'll have to add the "windows/required"
 directory to your PATH environment variable so Windows can find the shared
 libraries the project will use.
 
