@@ -13,7 +13,6 @@ There is quite a bit of starter code for project 3. It contains math
 utility functions and classes, code to load the application, code to load
 models, and code to handle mouse/keyboard input.
 
-Report any bugs to the TAs.
 
 ---------------------------------------------------------------------------
 Building the Code
@@ -55,7 +54,7 @@ cmake -DCMAKE_BUILD_TYPE=Release ../src
 
 ***************
 
-WINDOWS NOTE: If you're using Windows, you'll have to add the "windows/bin"
+WINDOWS NOTE: If you're using Windows, you'll have to add the "windows/required"
 directory to your PATH environment variable so Windows can find the shared
 libraries the project will use.
 
