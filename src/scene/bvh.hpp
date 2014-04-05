@@ -9,20 +9,69 @@ namespace _462 {
 	class Geometry;
 	struct hitRecord;
 	
-	class bvhNode
+	struct BVHBuildNode
+	{
+		// BVHBuildNode Public Methods
+		BVHBuildNode() { children[0] = children[1] = NULL; }
+		
+		void InitLeaf(uint32_t first, uint32_t n, const BoundingBox &b) {
+			firstPrimOffset = first;
+			nPrimitives = n;
+			bounds = b;
+		}
+		void InitInterior(uint32_t axis, BVHBuildNode *c0, BVHBuildNode *c1) {
+			children[0] = c0;
+			children[1] = c1;
+			bounds = c0->bounds;
+			bounds.AddBox(c1->bounds);
+			splitAxis = axis;
+			nPrimitives = 0;
+		}
+		BoundingBox bounds;
+		BVHBuildNode* children[2];
+		uint32_t splitAxis, firstPrimOffset, nPrimitives;
+	};
+	// BVHAccel Local Declarations
+	struct BVHPrimitiveInfo {
+		BVHPrimitiveInfo() { }
+		BVHPrimitiveInfo(int pn, const BoundingBox &b)
+			: primitiveNumber(pn), bounds(b) {
+				centroid = .5f * b.lowCoord + .5f * b.highCoord;
+		}
+		uint32_t primitiveNumber;
+		Vector3 centroid;
+		BoundingBox bounds;
+	};
+	struct LinearBVHNode {
+		BoundingBox bounds;
+		union {
+			uint32_t primitivesOffset;    // leaf
+			uint32_t secondChildOffset;   // interior
+		};
+
+		uint8_t nPrimitives;  // 0 -> interior node
+		uint8_t axis;         // interior node: xyz
+		uint8_t pad[2];       // ensure 32 byte total size
+	};
+	class BVHAccel
 	{
 	public:
-		enum BoundaryType { xBoundary, yBoundary, zBoundary };
-		bvhNode(std::vector<Geometry*> geometries);
-		~bvhNode();
+		BVHAccel(const std::vector<Geometry*>& geometries, uint32_t maxPrims = 1,
+             const std::string &sm = "sah");
+
+		//bvhNode();
+		~BVHAccel();
 		Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
 	private:
+		BVHBuildNode *recursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
+        uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims);
+	    uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
 
-		void GetChildNodeBounds(const std::vector<Geometry*> geometries, BoundingBox& box1, BoundingBox& box2)const;
-		BoundingBox bb;
-		bvhNode *left, *right;
-		std::vector<Geometry*> entries;
-		int size;
+		uint32_t maxPrimsInNode;
+		enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };
+		SplitMethod splitMethod;
+		std::vector<Geometry*> primitives;
+		LinearBVHNode *nodes;
 	};
 }/* _462 */
 
