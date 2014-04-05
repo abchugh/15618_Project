@@ -13,7 +13,6 @@ There is quite a bit of starter code for project 3. It contains math
 utility functions and classes, code to load the application, code to load
 models, and code to handle mouse/keyboard input.
 
-Report any bugs to the TAs.
 
 ---------------------------------------------------------------------------
 Building the Code
