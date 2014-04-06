@@ -158,7 +158,7 @@ private:
     // list of all geometries. deleted in dctor, so should be allocated on heap.
     GeometryList geometries;
 
-	bvhNode* tree;
+	BVHAccel* tree;
 
 private:
 	

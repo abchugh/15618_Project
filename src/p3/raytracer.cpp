@@ -159,14 +159,14 @@ bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
         int loop_upper = std::min(current_row + STEP_SIZE, height);
 
         // This tells OpenMP that this loop can be parallelized.
-//#pragma omp parallel for
+#pragma omp parallel for
         for (int c_row = current_row; c_row < loop_upper; c_row++)
         {
             /*
              * This defines a critical region of code that should be
              * executed sequentially.
              */
-//#pragma omp critical
+#pragma omp critical
             {
                 if (c_row % PRINT_INTERVAL == 0)
                     printf("Raytracing (Row %d)\n", c_row);

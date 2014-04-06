@@ -85,7 +85,7 @@ void Model::InitGeometry()
 		triangles.push_back(t);
 		geometries.push_back(&triangles[i]);
 	}
-	bvh = new bvhNode(geometries);
+	bvh = new BVHAccel(geometries);
 }
 
 bool Model::hit(const Ray& r, const real_t t0, const real_t t1,hitRecord& h, bool fullRecord) const

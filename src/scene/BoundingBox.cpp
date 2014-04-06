@@ -17,6 +17,28 @@ void BoundingBox::AddPoint(Vector3 point)
 	}
 }
 
+real_t BoundingBox::SurfaceArea()const
+{
+	return 2*(extent(0)*extent(1) + extent(0)*extent(2) + extent(1)*extent(2) ); 
+}
+int BoundingBox::MaximumExtent()const
+{
+	if( extent(0) > extent(1))
+	{
+		if(extent(0)>extent(2))
+			return 0;
+		else
+			return 2;
+	}
+	else
+	{
+		if(extent(1)>extent(2))
+			return 1;
+		else
+			return 2;
+	}
+}
+
 void BoundingBox::AddBox(BoundingBox box)
 {
 	for(int i=0;i<3;i++)

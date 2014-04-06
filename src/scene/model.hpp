@@ -30,7 +30,7 @@ public:
     virtual void render() const;
 	virtual bool hit(const Ray& r, real_t t0, real_t t1,hitRecord& h, bool fullRecord) const;
 	virtual void InitGeometry();
-	bvhNode *bvh;
+	BVHAccel* bvh;
 	std::vector<Triangle> triangles;
 };
 

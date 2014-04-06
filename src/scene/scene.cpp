@@ -89,7 +89,7 @@ void Geometry::Transform(real_t translate, const Vector3 rotate)
 
 void Scene::buildBVH()
 {
-	tree = new bvhNode(geometries);
+	tree = new BVHAccel(geometries);
 }
 
 Geometry* const* Scene::get_geometries() const

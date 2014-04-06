@@ -18,7 +18,14 @@ public:
 	//check if a box intersects with another
 	bool hit(BoundingBox box)const;
 
+	int MaximumExtent()const;
 	Vector3 lowCoord, highCoord;
+	real_t SurfaceArea()const;
+private:
+	inline real_t extent(int dim)const
+	{
+		return highCoord[dim]-lowCoord[dim];
+	}
 };
 }
 #endif
