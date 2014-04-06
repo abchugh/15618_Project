@@ -1,5 +1,7 @@
 #include "bvh.hpp"
 #include "scene/scene.hpp"
+#include <SDL_timer.h>
+
 using namespace std;
 namespace _462 {
 	
@@ -33,6 +35,8 @@ namespace _462 {
 	
 	BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL) 
 	{
+		time_t startTime = SDL_GetTicks();
+
 		printf("Building BVH...\n");
 		maxPrimsInNode = min(255u, mp);
 		primitives = geometries;
@@ -64,7 +68,9 @@ namespace _462 {
 		flattenBVHTree(root, &offset);
 		assert(offset == totalNodes);
 		
-		printf("Done Building BVH\n");
+		time_t endTime = SDL_GetTicks();
+		
+		printf("Done Building BVH in %d \n", endTime-startTime);
     }
 
 	struct CompareToMid {
@@ -114,6 +120,7 @@ namespace _462 {
 	}
 	BVHBuildNode *BVHAccel::recursiveBuild( vector<BVHPrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims){
+		
 		assert(start != end);
 		(*totalNodes)++;
 		BVHBuildNode *node = new BVHBuildNode();
@@ -156,7 +163,7 @@ namespace _462 {
 			switch (splitMethod) {
 			case SPLIT_MIDDLE: {
 				// Partition primitives through node's midpoint
-				float pmid = .5f * (centroidBounds.lowCoord[dim] + centroidBounds.highCoord[dim]);
+				double pmid = .5f * (centroidBounds.lowCoord[dim] + centroidBounds.highCoord[dim]);
 				BVHPrimitiveInfo *midPtr = std::partition(&buildData[start],
 														  &buildData[end-1]+1,
 														  CompareToMid(dim, pmid));
@@ -285,7 +292,6 @@ namespace _462 {
 	Geometry* BVHAccel::hit(const Ray& ray, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const
 	{
 		if(!nodes) return NULL;
-		bool hit = false;
 		Vector3 invDir(1.f / ray.d.x, 1.f / ray.d.y, 1.f / ray.d.z);
 		uint32_t dirIsNeg[3] = { invDir.x < 0, invDir.y < 0, invDir.z < 0 };
 		// Follow ray through BVH nodes to find primitive intersections
@@ -298,7 +304,8 @@ namespace _462 {
 		while (true) {
 			const LinearBVHNode *node = &nodes[nodeNum];
 			// Check ray against BVH node
-			if (node->bounds.hit(ray, t0, minT)) {
+			//if (node->bounds.hit(ray, t0, minT)) {
+			if (node->bounds.hit(invDir,ray.e, t0, minT,dirIsNeg)) {
 				if (node->nPrimitives > 0) {
 					
 					for (uint32_t i = 0; i < node->nPrimitives; ++i)

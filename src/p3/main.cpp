@@ -569,7 +569,7 @@ static bool parse_args( Options* opt, int argc, char* argv[] )
 	opt->open_window = true;
 	opt->width = DEFAULT_WIDTH;
 	opt->height = DEFAULT_HEIGHT;
-	opt->num_samples = 1;
+	opt->num_samples = 5;
 	opt->num_glossy_reflection_samples = 0;
 
 	for (int i = 2; i < argc; i++)

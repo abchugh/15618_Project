@@ -17,6 +17,9 @@ namespace _462 {
 // floating point precision set by this typedef
 typedef double real_t;
 
+typedef unsigned int uint32_t;
+typedef unsigned char uint8_t;
+
 class Color3;
 
 // since the standard library happily does not provide one

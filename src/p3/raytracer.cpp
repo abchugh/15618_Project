@@ -14,6 +14,7 @@
 #include <SDL_timer.h>
 #include <iostream>
 #include <random>
+#include <time.h>
 
 #ifdef OPENMP // just a defense in case OpenMP is not installed.
 
@@ -132,8 +133,12 @@ Color3 Raytracer::trace_pixel(const Scene* scene,
  */
 bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
 {
+	static time_t startTime = SDL_GetTicks();
+	if(current_row==0)
+		startTime = SDL_GetTicks();
+	
     // TODO Add any modifications to this algorithm, if needed.
-
+	
     static const size_t PRINT_INTERVAL = 64;
 
     // the time in milliseconds that we should stop
@@ -146,7 +151,6 @@ bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
         unsigned int duration = (unsigned int) (*max_time * 1000);
         end_time = SDL_GetTicks() + duration;
     }
-
     // until time is up, run the raytrace. we render an entire group of
     // rows at once for simplicity and efficiency.
     for (; !max_time || end_time > SDL_GetTicks(); current_row += STEP_SIZE)
@@ -166,11 +170,11 @@ bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
              * This defines a critical region of code that should be
              * executed sequentially.
              */
-#pragma omp critical
+/*#pragma omp critical
             {
                 if (c_row % PRINT_INTERVAL == 0)
                     printf("Raytracing (Row %d)\n", c_row);
-            }
+            }*/
 
             for (size_t x = 0; x < width; x++)
             {
@@ -181,8 +185,8 @@ bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
             }
         }
     }
-
-    if (is_done) printf("Done raytracing!\n");
+	time_t endTime = SDL_GetTicks();
+    if (is_done) printf("Done raytracing! %d\n", endTime-startTime);
 
     return is_done;
 }

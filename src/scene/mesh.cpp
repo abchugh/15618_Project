@@ -60,7 +60,7 @@ Mesh::~Mesh() { }
 bool Mesh::load()
 {
     std::cout << "Loading mesh from '" << filename << "'..." << std::endl;
-#ifdef MY_COMPUTER
+#ifdef _WINDOWS
 	filename = std::string("../../").append(filename);
 #endif
 

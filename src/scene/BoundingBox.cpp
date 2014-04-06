@@ -60,6 +60,33 @@ bool BoundingBox::hit(BoundingBox box)const
 	return true;
 }
 
+bool BoundingBox::hit(const Vector3& invDir, const Vector3& origin, real_t t0, real_t t1, const uint32_t dirIsNeg[3])const
+{
+	float tmin =  (operator[](	dirIsNeg[0]).x - origin.x) * invDir.x;
+    float tmax =  (operator[](1-dirIsNeg[0]).x - origin.x) * invDir.x;
+    float tymin = (operator[](  dirIsNeg[1]).y - origin.y) * invDir.y;
+    float tymax = (operator[](1-dirIsNeg[1]).y - origin.y) * invDir.y;
+    if ((tmin > tymax) || (tymin > tmax))
+        return false;
+    if (tymin > tmin) tmin = tymin;
+    if (tymax < tmax) tmax = tymax;
+
+    // Check for ray intersection against $z$ slab
+    float tzmin = (operator[](  dirIsNeg[2]).z - origin.z) * invDir.z;
+    float tzmax = (operator[](1-dirIsNeg[2]).z - origin.z) * invDir.z;
+    if ((tmin > tzmax) || (tzmin > tmax))
+        return false;
+    if (tzmin > tmin)
+        tmin = tzmin;
+    if (tzmax < tmax)
+        tmax = tzmax;
+
+	if(tmax<t0 || tmin>t1)
+		return false;
+
+	return tmin <= tmax + 1e-5;//SLOP
+}
+
 bool BoundingBox::hit(const Ray& r, real_t t0, real_t t1)const
 {
 	if(r.d.x == 0 || r.d.y == 0 || r.d.z == 0 )

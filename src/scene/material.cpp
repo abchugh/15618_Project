@@ -44,7 +44,7 @@ bool Material::load()
     // if no texture, nothing to do
     if ( texture_filename.empty() )
         return true;
-#ifdef MY_COMPUTER
+#ifdef _WINDOWS
 	texture_filename = std::string("../../").append(texture_filename);
 #endif
 
