@@ -3,6 +3,7 @@
 
 #include "math/vector.hpp"
 #include <vector>
+#include <stack>
 #include <pthread.h>
 #include "scene/BoundingBox.hpp"
 namespace _462 {
@@ -69,17 +70,22 @@ namespace _462 {
     };
 
     struct BuildArg {
-	std::vector<BVHPrimitiveInfo> &buildData;
+	std::vector<BVHPrimitiveInfo> *buildDataPtr;
 	uint32_t *totalNodes;
-	std::vector<Geometry*> &orderedPrims;
+	std::vector<Geometry*> *orderedPrimsPtr;
+	std::vector<Geometry*> *primitivesPtr;
+	uint32_t maxPrimsInNode;
 	int threadId;
 	int threadNum;
-	pthread_barrier_t &barrier;
-	std::stack<std::pair<uint32_t, uint32_t>> &infoStack;
+	pthread_barrier_t *barrierPtr;
+	std::stack<std::pair<int32_t, int32_t>> *infoStackPtr;
 	BucketInfo* buckets;
-	BucketInfo* sharedBuffer;
 	float* cost;
-    }
+	int *dimPtr;
+	// TODO: Padding
+	BoundingBox* bboxes;
+	BoundingBox* centroidBounds;
+    };
 
     class BVHAccel
     {
@@ -90,23 +96,23 @@ namespace _462 {
         //bvhNode();
         ~BVHAccel();
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
+     
     private:
         BVHBuildNode *recursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
                      uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims);
 	BVHBuildNode* iterativeBuild(std::vector<BVHPrimitiveInfo> &buildData, 
 				     uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims);
-	void* multithreadedBuild(void* arg);
         BVHBuildNode *SAHSplit(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end, 
-                   BoundingBox bbox, BoundingBox centroidBounds,
-                   int dim, 
-                   std::vector<Geometry*> &orderedPrims, BVHBuildNode *node);
-        
+			       BoundingBox bbox, BoundingBox centroidBounds,
+			       int dim, 
+			       std::vector<Geometry*> &orderedPrims, BVHBuildNode *node, uint32_t& mid);
+
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
 
-        uint32_t maxPrimsInNode;
+	uint32_t maxPrimsInNode;
         enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };
         SplitMethod splitMethod;
-        std::vector<Geometry*> primitives;
+	std::vector<Geometry*> primitives;
         LinearBVHNode *nodes;
     };
 }/* _462 */
