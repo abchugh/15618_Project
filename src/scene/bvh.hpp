@@ -31,7 +31,10 @@ namespace _462 {
         }
 	
 	void InitChild(BVHBuildNode *child, bool left) {
-	    children[(left != true)] = child;
+	    int c = (left) ? 0 : 1;
+	    children[c] = child;
+
+	    nPrimitives = 0;
 	    bounds.AddBox(child->bounds);
 	}
 

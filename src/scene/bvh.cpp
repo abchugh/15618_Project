@@ -7,7 +7,7 @@
 
 using namespace std;
 namespace _462 {
-    const int nBuckets = 12;
+    const int nBuckets = 8;
     const int numThreads = 2;
 
     static real_t BoxArea(BoundingBox b)
@@ -63,7 +63,7 @@ namespace _462 {
         uint32_t totalNodes = 0;
         vector< Geometry* > orderedPrims;
         orderedPrims.reserve(primitives.size());
-	printf("#%ld - %d\n", &buildData, buildData.size());
+
 	/*
         BVHBuildNode *root = recursiveBuild(buildData, 0, primitives.size(), 
 					    &totalNodes, orderedPrims);
@@ -132,6 +132,7 @@ namespace _462 {
             nodes = NULL;
         }
     }
+
     BVHBuildNode* BVHAccel::SAHSplit(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end, 
 				     BoundingBox bbox, BoundingBox centroidBounds,
 				     int dim, 
@@ -381,6 +382,7 @@ namespace _462 {
 
 	    if (threadId == 0) {
 		// Either create leaf or split primitives at selected SAH bucket
+		// TODO: minCost?
 		if (nPrimitives > buildArg->maxPrimsInNode ||
 		    minCost < nPrimitives) {
 		    BVHPrimitiveInfo *pmid = std::partition(&buildData[start],
@@ -415,7 +417,7 @@ namespace _462 {
 	int threadNum = buildArg->threadNum;
 	BVHBuildNode* parent = NULL;
 	std::stack<BVHBuildNode*> parentPtrStack;
-	parentPtrStack.push(parent);
+	//	parentPtrStack.push(parent);
 
 	BVHBuildNode* node = NULL;
 	BVHBuildNode* root = NULL;
@@ -423,28 +425,37 @@ namespace _462 {
 	BoundingBox* bboxes = buildArg->bboxes;
 	BoundingBox* centroidBounds = buildArg->centroidBounds;
 
+	time_t startTime;
+	time_t endTime;
+
 	while (!infoStackPtr->empty()) {
 	    std::pair<int32_t, int32_t> range = infoStackPtr->top();
 	    int start = range.first;
 	    int end = range.second;
-
+	    //printf("Thread %d: grasp job %d - %d.\n", threadId, start, end);
 	    bool left = (start < 0);
-	    start = (start < 0) ? -1 * start : start;
+	    start = (start < 0) ? -1 * start - 1 : start;
 	    int split = (start + end) / 2;
 
+	    //printf("Thread %d: grasp job %d - %d.\n", threadId, start, end);
+	    assert(start != end);
 	    pthread_barrier_wait(buildArg->barrierPtr);
 	    
 	    if (threadId == 0) {
+		startTime = SDL_GetTicks();
 		infoStackPtr->pop();
 		node = new BVHBuildNode();
 		if (root == NULL)
 		    root = node;
 
-		parent = parentPtrStack.top();
-		if (!left)
-		    parentPtrStack.pop();
-		if (parent != NULL) {
-		    parent->InitChild(node, left);
+		if (parentPtrStack.size() > 0) {
+		    parent = parentPtrStack.top();
+
+		    if (!left)
+			parentPtrStack.pop();
+		    if (parent != NULL) {
+			parent->InitChild(node, left);
+		    }
 		}
 		(*(buildArg->totalNodes))++;
 	    }
@@ -464,11 +475,19 @@ namespace _462 {
 
 	    // Merge the large bounding box at bboxes[0].
 	    if (threadId == 0) {
+		endTime = SDL_GetTicks();
+		if (start == 0)
+		printf("Build local large bb: %d\n", endTime - startTime);
+		startTime = SDL_GetTicks();
 		for (int i = 1; i < threadNum; i++) {
 		    bboxes[0].AddBox(bboxes[i]);
 		}
-	    }
+		endTime = SDL_GetTicks();
+		if (start == 0)
+		printf("Merge large bb: %d\n", endTime - startTime);
 
+	    }
+	    //	    printf("after large merge.\n");
 	    pthread_barrier_wait(buildArg->barrierPtr);
 	    
 	    if (nPrimitives == 1) {
@@ -483,6 +502,7 @@ namespace _462 {
 	    }
 	    else {
 		// Find largest diverge dimension in parallel.
+		startTime = SDL_GetTicks();
 		BoundingBox localCentroidBound;
 		for (int i = start + threadId * localSize; i < end && 
 			 i < start + (threadId + 1) * localSize; i++) {
@@ -491,32 +511,43 @@ namespace _462 {
 		centroidBounds[threadId] = localCentroidBound;
 		pthread_barrier_wait(buildArg->barrierPtr);
 
+		//		printf("after centroid.\n");
 		if (threadId == 0) {
 		    for (int i = 1; i < threadNum; i++) {
 			centroidBounds[0].AddBox(centroidBounds[i]);
 		    }
 		    *(buildArg->dimPtr) = centroidBounds[0].MaximumExtent();
+		    endTime = SDL_GetTicks();
+		if (start == 0)
+		    printf("Find dim: %d\n", endTime - startTime);
+
 		}
 		pthread_barrier_wait(buildArg->barrierPtr);
 
 		int dim = *(buildArg->dimPtr);
 		// TODO: Special case here.
+		startTime = SDL_GetTicks();
 		split = multithreadedSAHSplit((*buildDataPtr), start, end,
 					      bboxes[0], centroidBounds[0], buildArg->cost,
 					      dim, *(buildArg->primitivesPtr),
 					      *(buildArg->orderedPrimsPtr), node,
 					      buildArg, *(buildArg->barrierPtr));
 
-	    }
+		//	    printf("after sah.\n");
+		//printf("split: %d\n", split);
+		pthread_barrier_wait(buildArg->barrierPtr);
+		if (threadId == 0) {
+		    endTime = SDL_GetTicks();
+		if (start == 0)
+		    printf("SAH: %d\n", endTime - startTime);
 
-	    pthread_barrier_wait(buildArg->barrierPtr);
-	    if (threadId == 0) {
-		if (split > 0) {
-		    parentPtrStack.push(node);
-		    std::pair<int32_t, int32_t> leftChild = std::make_pair(-1 * start, split);
-		    std::pair<int32_t, int32_t> rightChild = std::make_pair(split, end);
-		    infoStackPtr->push(rightChild);
-		    infoStackPtr->push(leftChild);
+		    if (split > 0) {
+			parentPtrStack.push(node);
+			std::pair<int32_t, int32_t> leftChild = std::make_pair(-1 * (start + 1), split);
+			std::pair<int32_t, int32_t> rightChild = std::make_pair(split, end);
+			infoStackPtr->push(rightChild);
+			infoStackPtr->push(leftChild);
+		    }
 		}
 	    }
 	    pthread_barrier_wait(buildArg->barrierPtr);
@@ -527,11 +558,9 @@ namespace _462 {
 
     BVHBuildNode* BVHAccel::iterativeBuild(std::vector<BVHPrimitiveInfo> &buildData, 
 					   uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims) {
-	std::pair<int32_t, int32_t> initInfo(0, primitives.size());
+	std::pair<int32_t, int32_t> initInfo(-1, primitives.size());
 	std::stack<std::pair<int32_t, int32_t>> infoStack;
 	infoStack.push(initInfo);
-	const int numThreads = 4;
-	const int nBuckets = 12;
 	pthread_barrier_t barrier;
 
 	pthread_barrier_init(&barrier, NULL, numThreads);
@@ -662,7 +691,9 @@ namespace _462 {
 	linearNode->bounds = node->bounds;
 	uint32_t myOffset = (*offset)++;
 	if (node->nPrimitives > 0) {
-	    assert(!node->children[0] && !node->children[1]);
+	    //	    printf("%ld: l: %ld; r: %ld\n", node, node->children[0], node->children[1]);
+	    assert(!node->children[0]);
+	    assert(!node->children[1]);
 	    linearNode->primitivesOffset = node->firstPrimOffset;
 	    linearNode->nPrimitives = node->nPrimitives;
 	}
