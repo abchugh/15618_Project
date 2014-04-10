@@ -1,10 +1,38 @@
 #include "bvh.hpp"
 #include "scene/scene.hpp"
 #include <SDL_timer.h>
+#include <queue>
+#include <omp.h>
 
 using namespace std;
 namespace _462 {
 	
+time_t t1[20], t2[20], t3[20], t4[20], t5[20], t6[20], t7[20], t8[20], tP[20];	
+//#define ENABLED_TIME_LOGS
+#ifdef ENABLED_TIME_LOGS
+	
+	time_t _prevTick[20];
+
+#define AddTimeSincePreviousTick(interval)\
+	{int tid = omp_get_thread_num();\
+	time_t timeNew = SDL_GetTicks();\
+	interval[tid] += timeNew - _prevTick[tid];\
+	_prevTick[tid] = timeNew;}
+
+#define GetTime(timeNew) time_t timeNew = SDL_GetTicks();\
+	_prevTick[omp_get_thread_num()] = timeNew;
+
+#else
+	#define AddTimeSincePreviousTick(interval)
+	#define GetTime(timeNew)
+#endif
+	static time_t sum(time_t arr[])
+	{
+		time_t sum = 0;
+		for(int i=0;i<20;i++)
+			sum+=arr[i];
+		return sum;
+	}
 	static real_t BoxArea(BoundingBox b)
 	{
 		real_t v = 1.0;
@@ -55,22 +83,126 @@ namespace _462 {
 			buildData.push_back(BVHPrimitiveInfo(i, primitives[i]->bb));
 		}
 		uint32_t totalNodes = 0;
-		vector< Geometry* > orderedPrims;
-		orderedPrims.reserve(primitives.size());
-		BVHBuildNode *root = recursiveBuild(buildData, 0, primitives.size(), &totalNodes, orderedPrims);
+		vector< Geometry* > orderedPrims(primitives.size());
+		
+		queueData rootData = {0, static_cast<uint32_t>(primitives.size()),NULL, true, NULL };
+		rootData.isValid = new bool;
+		*rootData.isValid = true;
+		q[0].push_back(rootData);
+
+		int working = 0;
+		
+
+		time_t endTime = SDL_GetTicks();
+		printf("Start phase  in %ld \n", endTime-startTime);
+
+		BVHBuildNode* root = NULL;
+		time_t busy[20] = {0}, idle[20] = {0}, idleX[20] = {0};
+		
+		printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
+		int blah = 0;
+#pragma omp parallel 
+		{
+			
+			int tid = omp_get_thread_num();
+			int backoff = 2;
+			while(1)
+			{
+				blah++;
+
+				time_t idleStart = SDL_GetTicks();
+				queueData data;
+				bool foundWork = false;
+				
+				#pragma omp critical(queueUpdate)
+				{
+					while(!q[tid].empty())
+					{
+						data = q[tid].back();
+						q[tid].pop_back();
+						if(!*data.isValid) {
+							delete data.isValid;
+							data.isValid = NULL;
+							continue;
+						}
+						*data.isValid = false;
+						working |= (1<<tid);
+						foundWork = true;
+						break;
+					}
+					if(!foundWork) while(!pq.empty())
+					{	
+						data = pq.top();	
+						pq.pop();
+						if(*data.isValid==false) {
+							delete data.isValid;
+							data.isValid = NULL;
+							continue;
+						}
+						*data.isValid = false;
+
+						working |= (1<<tid);
+						foundWork = true;
+						break;
+					}
+					if(!foundWork)
+						working &= 0xFFFF - (1<<tid);
+				}
+				if(!foundWork)
+				{	
+						SDL_Delay(backoff);
+						if(backoff<4)backoff*=2;
+				}
+				
+				if(blah%10==0 && blah<200)/*if(working& (1<<tid))*/
+					printf("%d %lu %ld\n", working,pq.size(),SDL_GetTicks()-endTime );//data.start, data.end);//
+				
+				if(working == 0) //no one is working, time to end
+					break;
+
+				time_t idleEnd = SDL_GetTicks();
+					
+				idleX[tid] += idleEnd-idleStart;
+				if(!foundWork)
+					idle[tid] += idleEnd - idleStart;
+				
+				if(foundWork)
+				{
+					time_t startT = SDL_GetTicks();
+					BVHBuildNode* node = recursiveBuild(buildData, data.start, data.end, &totalNodes, orderedPrims, 
+								data.parent, data.isFirstChild);
+					if(data.parent == NULL)
+						root = node;
+					time_t endT = SDL_GetTicks();
+					busy[tid]+=endT-startT;
+				}
+			}
+		}
+
+		assert(root!=NULL);
 		primitives.swap(orderedPrims);
+
+		endTime = SDL_GetTicks();
+		
+		printf("End phase in %ld \n", endTime-startTime);
 		
 		 // Compute representation of depth-first traversal of BVH tree
 		nodes = new LinearBVHNode[totalNodes];
-		//for (uint32_t i = 0; i < totalNodes; ++i)
-			//new (&nodes[i]) LinearBVHNode;
+
 		uint32_t offset = 0;
 		flattenBVHTree(root, &offset);
 		assert(offset == totalNodes);
 		
-		time_t endTime = SDL_GetTicks();
+		 endTime = SDL_GetTicks();
 		
-		printf("Done Building BVH in %d \n", endTime-startTime);
+		/*printf("Phases %lld %lld %lld %lld %lld %lld %lld %lld %lld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
+		for(int i=0;i<20;i++) if(busy[i]!=0)
+			printf("%ld ", busy[i]);
+		printf("\n");
+		for(int i=0;i<20;i++) if(busy[i]!=0)
+			printf("%lld/%lld ", idle[i], idleX[i]);*/
+		printf("\n");
+		printf("Done Building BVH in %ld \n", endTime-startTime);
     }
 
 	struct CompareToMid {
@@ -118,26 +250,45 @@ namespace _462 {
 			nodes = NULL;
 		}
 	}
-	BVHBuildNode *BVHAccel::recursiveBuild( vector<BVHPrimitiveInfo> &buildData, uint32_t start,
-        uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims){
+	//TODO:convert into #define to check for perf improvement
+	void BVHAccel::buildLeaf(vector<BVHPrimitiveInfo> &buildData, uint32_t start,
+        uint32_t end, vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox)
+	{
+		GetTime(primitiveStart);
+		for (uint32_t i = start; i < end; ++i)
+				orderedPrims[i] = primitives[buildData[i].primitiveNumber];
+		node->InitLeaf(start, end-start, bbox);
 		
+		AddTimeSincePreviousTick(tP);
+	}
+	BVHBuildNode *BVHAccel::recursiveBuild( vector<BVHPrimitiveInfo> &buildData, uint32_t start,
+        uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
+			
+		//printf("%d %d %d\n", start,end, omp_get_thread_num());
+
 		assert(start != end);
-		(*totalNodes)++;
-		BVHBuildNode *node = new BVHBuildNode();
+		GetTime(startTime);
+
+#pragma omp atomic
+			(*totalNodes)++;
+		
+		BVHBuildNode *node = new BVHBuildNode(parent, firstChild);
+		if(parent)
+			parent->children[firstChild?0:1] = node;
+
+		int numInternalBranches = 0;
+		queueData child1Data, child2Data;
+
+		uint32_t nPrimitives = end - start;
+
 		// Compute bounds of all primitives in BVH node
 		BoundingBox bbox;
 		for (uint32_t i = start; i < end; ++i)
 			bbox.AddBox(buildData[i].bounds);
+		AddTimeSincePreviousTick(t1);
 
-		uint32_t nPrimitives = end - start;
 		if (nPrimitives == 1) {
-			// Create leaf _BVHBuildNode_
-			uint32_t firstPrimOffset = orderedPrims.size();
-			for (uint32_t i = start; i < end; ++i) {
-				uint32_t primNum = buildData[i].primitiveNumber;
-				orderedPrims.push_back(primitives[primNum]);
-			}
-			node->InitLeaf(firstPrimOffset, nPrimitives, bbox);
+			buildLeaf(buildData,start,end, orderedPrims,node,bbox);
 		}
 		else {
 			// Compute bound of primitive centroids, choose split dimension _dim_
@@ -145,20 +296,16 @@ namespace _462 {
 			for (uint32_t i = start; i < end; ++i)
 				centroidBounds.AddPoint(buildData[i].centroid);
 			int dim = centroidBounds.MaximumExtent();
+			AddTimeSincePreviousTick(t2);
+
 
 			// Partition primitives into two sets and build children
 			uint32_t mid = (start + end) / 2;
 			if (centroidBounds.highCoord[dim] == centroidBounds.lowCoord[dim]) {
-				// Create leaf _BVHBuildNode_
-				uint32_t firstPrimOffset = orderedPrims.size();
-				for (uint32_t i = start; i < end; ++i) {
-					uint32_t primNum = buildData[i].primitiveNumber;
-					orderedPrims.push_back(primitives[primNum]);
-				}
-				node->InitLeaf(firstPrimOffset, nPrimitives, bbox);
-				return node;
+				buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+				goto finishUp;
 			}
-
+			
 			// Partition primitives based on _splitMethod_
 			switch (splitMethod) {
 			case SPLIT_MIDDLE: {
@@ -188,6 +335,10 @@ namespace _462 {
 					mid = (start + end) / 2;
 					std::nth_element(&buildData[start], &buildData[mid],
 									 &buildData[end-1]+1, ComparePoints(dim));
+					
+				
+					AddTimeSincePreviousTick(t3);
+
 				}
 				else {
 					// Allocate _BucketInfo_ for SAH partition buckets
@@ -198,9 +349,10 @@ namespace _462 {
 						BoundingBox bounds;
 					};
 					BucketInfo buckets[nBuckets];
-
+				
 					// Initialize _BucketInfo_ for SAH partition buckets
-					for (uint32_t i = start; i < end; ++i) {
+					for (uint32_t j = 0; j < nPrimitives; ++j) {
+						uint32_t i = j + start;
 						int b = nBuckets *
 							((buildData[i].centroid[dim] - centroidBounds.lowCoord[dim]) /
 							 (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim]));
@@ -209,7 +361,8 @@ namespace _462 {
 						buckets[b].count++;
 						buckets[b].bounds.AddBox(buildData[i].bounds);
 					}
-
+					AddTimeSincePreviousTick(t4);
+	
 					// Compute costs for splitting after each bucket
 					float cost[nBuckets-1];
 					for (int i = 0; i < nBuckets-1; ++i) {
@@ -226,16 +379,19 @@ namespace _462 {
 						cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
 								  bbox.SurfaceArea();
 					}
+					AddTimeSincePreviousTick(t5);
 
 					// Find bucket to split at that minimizes SAH metric
 					float minCost = cost[0];
 					uint32_t minCostSplit = 0;
 					for (int i = 1; i < nBuckets-1; ++i) {
+
 						if (cost[i] < minCost) {
 							minCost = cost[i];
 							minCostSplit = i;
 						}
 					}
+					AddTimeSincePreviousTick(t6);
 
 					// Either create leaf or split primitives at selected SAH bucket
 					if (nPrimitives > maxPrimsInNode ||
@@ -244,28 +400,78 @@ namespace _462 {
 							&buildData[end-1]+1,
 							CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
 						mid = pmid - &buildData[0];
+						
+						AddTimeSincePreviousTick(t7);
 					}
                 
 					else {
-						// Create leaf _BVHBuildNode_
-						uint32_t firstPrimOffset = orderedPrims.size();
-						for (uint32_t i = start; i < end; ++i) {
-							uint32_t primNum = buildData[i].primitiveNumber;
-							orderedPrims.push_back(primitives[primNum]);
-						}
-						node->InitLeaf(firstPrimOffset, nPrimitives, bbox);
-						return node;
+						buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+						goto finishUp;
 					}
+					
+					
 				}
 				break;
 			}
 			}
-			node->InitInterior(dim,
-							   recursiveBuild(buildData, start, mid,
-											  totalNodes, orderedPrims),
-							   recursiveBuild(buildData, mid, end,
-											  totalNodes, orderedPrims));
+			node->splitAxis = dim;
+
+			numInternalBranches = (nPrimitives>200)?1:2;
+			child1Data.start = start;
+			child1Data.end = mid;
+			child1Data.parent = node;
+			child1Data.isFirstChild= true;
+
+			child2Data.start = mid;
+			child2Data.end = end;
+			child2Data.parent = node;
+			child2Data.isFirstChild = false;
+			
+			if(numInternalBranches==1)
+			{			
+				child2Data.isValid = new bool;
+				*child2Data.isValid = true;
+				q[omp_get_thread_num()].push_back(child2Data);
+
+				queueData top;
+				if(!pq.empty())top=pq.top();
+				if(pq.size()<omp_get_max_threads() || (top.end-top.start)/8<child2Data.end-child2Data.start)
+				{
+					#pragma omp critical(queueUpdate)
+						pq.push(child2Data);
+				}
+			}
 		}
+		finishUp:
+		if(parent)
+		{
+			assert(!parent->childComplete[firstChild?0:1]);
+			parent->childComplete[firstChild?0:1] = true;
+
+			while(parent!=NULL)
+			{
+				/*not thread safe??*/
+				if(parent->childComplete[0] == true && parent->childComplete[1] == true)
+					parent->InitInterior(parent->children[0], parent->children[1]);
+				else
+					break;
+				parent = parent->parent;
+			}
+		}
+		
+		AddTimeSincePreviousTick(t8);
+		if(numInternalBranches>=1)
+		{
+			//printf("tid: %d continuing %d %d\n", omp_get_thread_num(), data1.start, data1.end);
+			recursiveBuild(buildData, child1Data.start, child1Data.end,
+					totalNodes, orderedPrims, child1Data.parent, child1Data.isFirstChild);
+			if(numInternalBranches==2)
+			{
+				recursiveBuild(buildData, child2Data.start, child2Data.end,
+					totalNodes, orderedPrims, child2Data.parent, child2Data.isFirstChild);
+			}
+		}
+	
 		return node;
 	}
 	uint32_t BVHAccel::flattenBVHTree(BVHBuildNode *node, uint32_t *offset)
@@ -343,54 +549,4 @@ namespace _462 {
 		}
 		return obj;
 	}
-	/*	if(!bb.hit(r,t0,t1))
-			return NULL;
-		
-		Geometry* obj = NULL;
-		real_t minT = t1;
-		hitRecord h1;
-
-		if(left==NULL || right==NULL)
-		{
-			minT = t1*2;
-			for(unsigned int i=0;i<entries.size();i++)
-				if(entries[i]->hit(r,t0,minT,h1,fullRecord))
-				{
-					if(minT>h1.t)
-					{
-						obj = entries[i];
-						minT = h1.t;
-						h = h1;
-						if(!fullRecord) return entries[i];
-					}
-				}
-
-			if(minT>t1)
-				return NULL;
-			else
-				return obj;
-		}
-
-		Geometry* obj1 = NULL;
-
-		if(left!=NULL && (obj1=left->hit(r,t0,minT,h1,fullRecord)) && minT>h1.t)
-		{
-			minT = h1.t;
-			h = h1;
-			obj = obj1;
-			if(!fullRecord) return obj;
-		}
-		
-		if(right!=NULL && (obj1=right->hit(r,t0,minT,h1,fullRecord)) && minT>h1.t)
-		{
-			minT = h1.t;
-			h = h1;
-			obj = obj1;
-			if(!fullRecord) return obj;
-		}
-		if(minT<t1)
-			return obj;
-		else
-			return NULL;
-	}*/
 }/* _462 */
