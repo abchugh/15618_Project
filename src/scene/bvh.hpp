@@ -96,6 +96,7 @@ namespace _462 {
 		enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };
 		SplitMethod splitMethod;
 		std::vector<Geometry*> primitives;
+		BVHBuildNode *root;
 		LinearBVHNode *nodes;
 		std::deque<queueData> q[MAX_THREADS];
 		std::priority_queue<queueData> pq;

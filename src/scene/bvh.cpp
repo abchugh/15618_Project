@@ -39,8 +39,15 @@ namespace _462 {
 	#define GetTime(timeNew)
 #endif
 	
-	
-	BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL) 
+	void deleteRecursive( BVHBuildNode* node)
+	{
+		if(node->children[0])
+			deleteRecursive(node->children[0]);
+		if(node->children[1])
+			deleteRecursive(node->children[1]);
+		delete node;
+	}
+	BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL), root(NULL)
 	{
 		time_t startTime = SDL_GetTicks();
 
@@ -69,8 +76,6 @@ namespace _462 {
 		*rootData.isValid = true;
 		pq.push(rootData);
 		//q[0].push_back(rootData);
-
-		BVHBuildNode* root = NULL;
 
 
 		time_t endTime = SDL_GetTicks();
@@ -193,7 +198,6 @@ namespace _462 {
 		uint32_t offset = 0;
 		flattenBVHTree(root, &offset);
 		assert(offset == totalNodes);
-		
 		endTime = SDL_GetTicks();
 		
 		printf("Done Building BVH at %ld \n", endTime-startTime);
@@ -238,6 +242,12 @@ namespace _462 {
 	}
 
 	BVHAccel::~BVHAccel() {
+		if(root)
+		{
+			deleteRecursive(root);
+			root = NULL;
+		}
+		
 		if(nodes)
 		{
 			delete []nodes;
