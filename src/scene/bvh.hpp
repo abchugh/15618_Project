@@ -73,6 +73,7 @@ namespace _462 {
 		uint8_t axis;         // interior node: xyz
 		uint8_t pad[2];       // ensure 32 byte total size
 	};
+	const int MAX_THREADS = 128;
 	class BVHAccel
 	{
 	public:
@@ -85,8 +86,8 @@ namespace _462 {
 	private:
 		BVHBuildNode *recursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
 			uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
-	    //BVHBuildNode *fastRecursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
-			//uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
+	    BVHBuildNode *fastRecursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
+			uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
 	    void buildLeaf(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
 		uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
@@ -96,9 +97,10 @@ namespace _462 {
 		SplitMethod splitMethod;
 		std::vector<Geometry*> primitives;
 		LinearBVHNode *nodes;
-		std::deque<queueData> q[20];
+		std::deque<queueData> q[MAX_THREADS];
 		std::priority_queue<queueData> pq;
 	};
 }/* _462 */
 
 #endif /* _462_BVH_HPP_ */
+
