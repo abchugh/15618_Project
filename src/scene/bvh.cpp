@@ -7,8 +7,35 @@
 
 using namespace std;
 namespace _462 {
-    const int nBuckets = 8;
-    const int numThreads = 2;
+    const int nBuckets = 10;
+    const int numThreads = 8;
+    const int LargePrimitives = 1000000;
+
+    static inline int nextPow2(int n)
+    {
+	n--;
+	n |= n >> 1;
+	n |= n >> 2;
+	n |= n >> 4;
+	n |= n >> 8;
+	n |= n >> 16;
+	n++;
+	n = n >> 1;
+	n = (n > 0) ? n : 1;
+
+	return n;
+    }
+
+    static inline int getDynamicThreads(int nPrimitives) {
+	int dynamicThreads = 1;
+	if (nPrimitives > 200000) {
+	    dynamicThreads = numThreads * static_cast<float>(nPrimitives) / LargePrimitives;
+	    dynamicThreads = nextPow2(dynamicThreads);
+	    dynamicThreads = 2;
+	}
+
+	return dynamicThreads;
+    }
 
     static real_t BoxArea(BoundingBox b)
     {
@@ -64,14 +91,14 @@ namespace _462 {
         vector< Geometry* > orderedPrims;
         orderedPrims.reserve(primitives.size());
 
-	/*
+	
         BVHBuildNode *root = recursiveBuild(buildData, 0, primitives.size(), 
 					    &totalNodes, orderedPrims);
-	*/
 	
+	/*
         BVHBuildNode *root = iterativeBuild(buildData,
 					    &totalNodes, orderedPrims);
-	
+	*/
         primitives.swap(orderedPrims);
         
          // Compute representation of depth-first traversal of BVH tree
@@ -142,7 +169,7 @@ namespace _462 {
 	uint32_t nPrimitives = end - start;
 
 	// Partition primitives using approximate SAH
-	if (nPrimitives <= 4) {
+	if (nPrimitives <= 20) {
 	    // Partition primitives into equally-sized subsets
 	    mid = (start + end) / 2;
 	    std::nth_element(&buildData[start], &buildData[mid],
@@ -153,36 +180,39 @@ namespace _462 {
 	    BucketInfo buckets[nBuckets];
 	    
 	    BucketInfo sumBuckets[nBuckets * numThreads];
+
 	    float cost[nBuckets-1];
+	    int dynamicThreads = getDynamicThreads(nPrimitives);
 	    time_t startTime = SDL_GetTicks();
-            #pragma omp parallel num_threads(numThreads)
+            #pragma omp parallel num_threads(dynamicThreads) 
 	    {
 		int threadId = omp_get_thread_num();
-		int threadNum = omp_get_num_threads();
+		BucketInfo localBuckets[nBuckets];
 		/*
 		time_t startTime;
 		time_t endTime;
 		if (start == 0 && threadId == 0)
 		    startTime = SDL_GetTicks();
 		*/
-
+		/*
 		int taskSize = (nPrimitives + threadNum - 1) / threadNum;
 		int taskStart = taskSize * threadId + start;
-		int taskEnd = taskStart + taskSize;
-		BucketInfo localBuckets[nBuckets];
+		int taskEnd = taskStart + taskSize;*/
 
 		// Initialize _BucketInfo_ for SAH partition buckets
 		// Hash into local buckets in parallel.
-		for (int i = taskStart; i < end && i < taskEnd; ++i) {
+                #pragma omp for
+		for (int i = start; i < end; ++i) {
 		    int b = nBuckets *
 			((buildData[i].centroid[dim] - centroidsLow) /
 			 (centroidsHigh - centroidsLow));
-		    if (b >= nBuckets) b = nBuckets-1;
-		    if (b < 0) b = 0;
+		    if (b == nBuckets) b = nBuckets-1;
+
 		    assert(b >= 0 && b < nBuckets);
 		    localBuckets[b].count++;
 		    localBuckets[b].bounds.AddBox(buildData[i].bounds);
 		}
+		/*
 		for (int i = 0; i < nBuckets; i++) {
 		    sumBuckets[threadId * nBuckets + i].count = localBuckets[i].count;
 		    sumBuckets[threadId * nBuckets + i].bounds.AddBox(localBuckets[i].bounds);
@@ -193,12 +223,20 @@ namespace _462 {
 		    printf("Thread 0: %d; %d\n", endTime - startTime, nPrimitives);
 		}
 		*/
+                #pragma omp critical 
+		{
+		    for (int i = 0; i < nBuckets; i++) {
+			buckets[i].count += localBuckets[i].count;
+			buckets[i].bounds.AddBox(localBuckets[i].bounds);
+		    }
+	        }
 	    }
 	    time_t endTime = SDL_GetTicks();
 	    if (start == 0)
-		printf("Local: %d; %d\n", endTime - startTime, nPrimitives);
+		printf("Hash buckets: %d; %d\n", endTime - startTime, nPrimitives);
 
 	    // Merge.
+	    /*
 	    startTime = SDL_GetTicks();
 	    for (int i = 0; i < numThreads; i++) {
 		for (int j = 0; j < nBuckets; j++) {
@@ -206,56 +244,29 @@ namespace _462 {
 		    buckets[j].bounds.AddBox(sumBuckets[i * nBuckets + j].bounds);
 		}
 	    }
+	    
 	    endTime = SDL_GetTicks();
 	    if (start == 0)
 		printf("Merge: %d; %d\n", endTime - startTime, nPrimitives);
-
-	    /*
-                #pragma omp critical 
-		{
-		for (int i = 0; i < nBuckets; i++) {
-		    buckets[i].count += localBuckets[i].count;
-		    buckets[i].bounds.AddBox(localBuckets[i].bounds);
-		}
-	        }
 	    */
-		/*
-		for (int j = 0; j < threadNum; j++) {
-		    for (int i = bTaskStart; i < nBuckets && i < bTaskEnd; i++) {
-			buckets[i].count += sumBuckets[i + j * nBuckets].count;
-			buckets[i].bounds.AddBox(sumBuckets[i + j * nBuckets].bounds);
-		    }
-		    }*/
-	    startTime = SDL_GetTicks();
-	    #pragma omp parallel num_threads(numThreads)
-	    {
-		int threadId = omp_get_thread_num();
-		int threadNum = omp_get_num_threads();
-	
-		// Changes to view of buckets.
-		int bTaskSize = (nBuckets + threadNum - 1) / threadNum;
-		int bTaskStart = bTaskSize * threadId;
-		int bTaskEnd = bTaskSize * (threadId + 1);
 
-		// Compute costs for splitting after each bucket
-		for (int i = bTaskStart; i < (nBuckets-1) && i < bTaskEnd; ++i) {
-		    BoundingBox b0, b1;
-		    int count0 = 0, count1 = 0;
-		    for (int j = 0; j <= i; ++j) {
-			b0.AddBox(buckets[j].bounds);
-			count0 += buckets[j].count;
-		    }
-		    for (int j = i+1; j < nBuckets; ++j) {
-			b1.AddBox(buckets[j].bounds);
-			count1 += buckets[j].count;
-		    }
-		    cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
-			bbox.SurfaceArea();
+	    //#pragma omp parallel for num_threads(1) 
+	    // Compute costs for splitting after each bucket
+	    for (int i = 0; i < nBuckets - 1; ++i) {
+		BoundingBox b0, b1;
+		int count0 = 0, count1 = 0;
+		for (int j = 0; j <= i; ++j) {
+		    b0.AddBox(buckets[j].bounds);
+		    count0 += buckets[j].count;
 		}
+		for (int j = i+1; j < nBuckets; ++j) {
+		    b1.AddBox(buckets[j].bounds);
+		    count1 += buckets[j].count;
+		}
+		cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
+		    bbox.SurfaceArea();
+		//printf("%d:%f\t", i, cost[i]);
 	    }
-	    endTime = SDL_GetTicks();
-	    if (start == 0)
-		printf("Cost: %d; %d\n\n", endTime - startTime, nPrimitives);
 
 	    // Find bucket to split at that minimizes SAH metric
 	    float minCost = cost[0];
@@ -270,10 +281,17 @@ namespace _462 {
 	    // Either create leaf or split primitives at selected SAH bucket
 	    if (nPrimitives > maxPrimsInNode ||
 		minCost < nPrimitives) {
+		startTime = SDL_GetTicks();
+
 		BVHPrimitiveInfo *pmid = std::partition(&buildData[start],
 							&buildData[end-1]+1,
 							CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
 		mid = pmid - &buildData[0];
+endTime = SDL_GetTicks();
+	    if (start == 0)
+		printf("Partition: %d; %d\n", endTime - startTime, nPrimitives);
+	    if (start == 0)
+		printf("Threads: %d\n\n", dynamicThreads);
 	    }
 	    else {
 		// Create leaf _BVHBuildNode_
@@ -304,6 +322,12 @@ namespace _462 {
 	uint32_t nPrimitives = end - start;
 	int split = (start + end) / 2;
 
+	time_t startTime;
+	time_t endTime;
+	startTime = SDL_GetTicks();
+	if (start == 0)
+	    printf("#%d\n", threadId);
+
 	// Partition primitives using approximate SAH
 	if (nPrimitives <= 4) {
 	    split = (start + end) / 2;
@@ -318,6 +342,7 @@ namespace _462 {
 	    int taskSize = (nPrimitives + threadNum - 1) / threadNum;
 	    int taskStart = taskSize * threadId + start;
 	    int taskEnd = taskStart + taskSize;
+	    taskEnd = (taskEnd > end) ? end : taskEnd;
 	    BucketInfo localBuckets[nBuckets];
 
 	    // Initialize _BucketInfo_ for SAH partition buckets
@@ -326,27 +351,45 @@ namespace _462 {
 		int b = nBuckets *
 		    ((buildData[i].centroid[dim] - centroidsLow) /
 		     (centroidsHigh - centroidsLow));
-		if (b == nBuckets) b = nBuckets-1;
+		if (b >= nBuckets) b = nBuckets-1;
+		if (b < 0) b = 0;
 		assert(b >= 0 && b < nBuckets);
 		localBuckets[b].count++;
 		localBuckets[b].bounds.AddBox(buildData[i].bounds);
 	    }
+
+	    endTime = SDL_GetTicks();
+	    if (start == 0) {
+		printf("#%d Build Buckets(1): %d (%d)\n", threadId, endTime - startTime, taskEnd - taskStart);
+	    }
+
 	    for (int i = 0; i < nBuckets; i++) {
 		buckets[threadId * nBuckets + i].count = localBuckets[i].count;
 		buckets[threadId * nBuckets + i].bounds.AddBox(localBuckets[i].bounds);
 	    }
 	    pthread_barrier_wait(&barrier);
+	    endTime = SDL_GetTicks();
+	    if (start == 0) {
+		printf("#%d Build Buckets: %d (%d)\n", threadId, endTime - startTime, taskEnd - taskStart);
+	    }
 
 	    // Merge.
 	    if (threadId == 0) {
+		startTime = SDL_GetTicks();
 		for (int i = 1; i < threadNum; i++) {
 		    for (int j = 0; j < nBuckets; j++) {
 			buckets[j].count += buckets[i * nBuckets + j].count;
 			buckets[j].bounds.AddBox(buckets[i * nBuckets + j].bounds);
 		    }
 		}
+		endTime = SDL_GetTicks();
+		if (threadId == 0 &&  start == 0) {
+		    printf("Merge Buckets: %d\n", endTime - startTime);
+		}
 	    }
 	    pthread_barrier_wait(&barrier);
+
+	    startTime = SDL_GetTicks();
 
 	    // Changes to view of buckets.
 	    int bTaskSize = (nBuckets + threadNum - 1) / threadNum;
@@ -369,18 +412,28 @@ namespace _462 {
 		    bbox.SurfaceArea();
 	    }
 	    pthread_barrier_wait(&barrier);
+	    endTime = SDL_GetTicks();
+	    if (start == 0) {
+		printf("#%d Compute Costs: %d\n", threadId, endTime - startTime);
+	    }
+	    startTime = SDL_GetTicks();
 
 	    // Find bucket to split at that minimizes SAH metric
-	    float minCost = cost[0];
-	    uint32_t minCostSplit = 0;
-	    for (int i = 1; i < nBuckets-1; ++i) {
-		if (cost[i] < minCost) {
-		    minCost = cost[i];
-		    minCostSplit = i;
-		}
-	    }
-
 	    if (threadId == 0) {
+		float minCost = cost[0];
+		uint32_t minCostSplit = 0;
+		for (int i = 1; i < nBuckets-1; ++i) {
+		    if (cost[i] < minCost) {
+			minCost = cost[i];
+			minCostSplit = i;
+		    }
+		}
+		endTime = SDL_GetTicks();
+		if (threadId == 0 &&  start == 0) {
+		    printf("Min: %d\n", endTime - startTime);
+		}
+		startTime = SDL_GetTicks();
+
 		// Either create leaf or split primitives at selected SAH bucket
 		// TODO: minCost?
 		if (nPrimitives > buildArg->maxPrimsInNode ||
@@ -403,8 +456,10 @@ namespace _462 {
 		}
 	    }
 	}
-
-	pthread_barrier_wait(&barrier);
+	endTime = SDL_GetTicks();
+	if (start == 0) {
+	    printf("#%d Others: %d\n", threadId, endTime - startTime);
+	}
 
 	return split;
     }
@@ -539,7 +594,7 @@ namespace _462 {
 		if (threadId == 0) {
 		    endTime = SDL_GetTicks();
 		if (start == 0)
-		    printf("SAH: %d\n", endTime - startTime);
+		    printf("SAH: %d (%d)\n", endTime - startTime, nPrimitives);
 
 		    if (split > 0) {
 			parentPtrStack.push(node);
@@ -612,11 +667,27 @@ namespace _462 {
 	BVHBuildNode *node = new BVHBuildNode();
 	// Compute bounds of all primitives in BVH node
 	BoundingBox bbox;
-
-	for (uint32_t i = start; i < end; ++i)
-	    bbox.AddBox(buildData[i].bounds);
-
 	uint32_t nPrimitives = end - start;
+
+	int dynamicThreads = getDynamicThreads(nPrimitives);
+
+	time_t startTime = SDL_GetTicks();
+	time_t endTime;
+	#pragma omp parallel num_threads(dynamicThreads) 
+	{
+	    BoundingBox localBox;
+            #pragma omp for 
+	    for (uint32_t i = start; i < end; ++i)
+		localBox.AddBox(buildData[i].bounds);
+            #pragma omp critical
+	    {
+		bbox.AddBox(localBox);
+	    }
+	}
+	endTime = SDL_GetTicks();
+	if (start == 0 && nPrimitives > 1)
+	    printf("Build large box: %d\n", endTime - startTime);
+
 	if (nPrimitives == 1) {
 	    // Create leaf _BVHBuildNode_
 	    uint32_t firstPrimOffset = orderedPrims.size();
@@ -631,8 +702,22 @@ namespace _462 {
 	    // TODO: Find min and max in parallel? Do the same to all the three dimensions?
 	    BoundingBox centroidBounds;
 
-	    for (uint32_t i = start; i < end; ++i)
-		centroidBounds.AddPoint(buildData[i].centroid);
+	    startTime = SDL_GetTicks();
+	    #pragma omp parallel num_threads(dynamicThreads) 
+	    {
+		BoundingBox localCentroid;
+                #pragma omp for 
+		for (uint32_t i = start; i < end; ++i)
+		    localCentroid.AddPoint(buildData[i].centroid);
+		#pragma omp critical
+		{
+		    centroidBounds.AddBox(localCentroid);
+		}
+	    }
+	    endTime = SDL_GetTicks();
+	    if (start == 0)
+		printf("Build centroid box: %d\n", endTime - startTime);
+
 	    int dim = centroidBounds.MaximumExtent();
 
 	    // Partition primitives into two sets and build children

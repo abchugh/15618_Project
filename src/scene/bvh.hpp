@@ -43,6 +43,7 @@ namespace _462 {
         uint32_t splitAxis, firstPrimOffset, nPrimitives;
     };
     // BVHAccel Local Declarations
+
     struct BVHPrimitiveInfo {
         BVHPrimitiveInfo() { }
         BVHPrimitiveInfo(int pn, const BoundingBox &b)
@@ -65,11 +66,13 @@ namespace _462 {
         uint8_t pad[2];       // ensure 32 byte total size
     };
 
+    #pragma align(64)
     struct BucketInfo {
 	BucketInfo() { count = 0; }
 	int count;
 	BoundingBox bounds;
 	// TODO: Padding?
+	char padding[64 - sizeof(int) - sizeof(BoundingBox)];
     };
 
     struct BuildArg {
