@@ -10,59 +10,81 @@ void BoundingBox::AddPoint(Vector3 point)
 {
 	for(int i=0;i<3;i++)
 	{
-		if(lowCoord[i]>point[i])
-			lowCoord[i] = point[i];
-		if(highCoord[i]<point[i])
-			highCoord[i] = point[i];
-	}
+        if(lowCoord[i]>point[i])
+            lowCoord[i] = point[i];
+        if(highCoord[i]<point[i])
+            highCoord[i] = point[i];
+    }
+}
+
+void BoundingBox::AddPoint(float point[3]) 
+{
+    for(int i=0;i<3;i++)
+    {
+        if(lowCoord[i]>point[i])
+        lowCoord[i] = point[i];
+        if(highCoord[i]<point[i])
+        highCoord[i] = point[i];
+    }
 }
 
 real_t BoundingBox::SurfaceArea()const
 {
-	return 2*(extent(0)*extent(1) + extent(0)*extent(2) + extent(1)*extent(2) ); 
+    return 2*(extent(0)*extent(1) + extent(0)*extent(2) + extent(1)*extent(2) ); 
 }
 int BoundingBox::MaximumExtent()const
 {
-	if( extent(0) > extent(1))
-	{
-		if(extent(0)>extent(2))
-			return 0;
-		else
-			return 2;
-	}
-	else
-	{
-		if(extent(1)>extent(2))
-			return 1;
-		else
-			return 2;
-	}
+    if( extent(0) > extent(1))
+    {
+        if(extent(0)>extent(2))
+            return 0;
+        else
+            return 2;
+    }
+    else
+    {
+        if(extent(1)>extent(2))
+            return 1;
+        else
+            return 2;
+    }
 }
 
 void BoundingBox::AddBox(BoundingBox box)
 {
-	for(int i=0;i<3;i++)
-	{
-		if(lowCoord[i] > box.lowCoord[i])
-			lowCoord[i] = box.lowCoord[i];
-		if(highCoord[i]<box.highCoord[i])
-			highCoord[i] = box.highCoord[i];
-	}
+    for(int i=0;i<3;i++)
+    {
+        if(lowCoord[i] > box.lowCoord[i])
+            lowCoord[i] = box.lowCoord[i];
+        if(highCoord[i]<box.highCoord[i])
+            highCoord[i] = box.highCoord[i];
+    }
+}
+
+void BoundingBox::AddBox(float lowCoord[3], float highCoord[3])
+{
+    for(int i=0;i<3;i++)
+    {
+        if(this->lowCoord[i] > lowCoord[i])
+            this->lowCoord[i] = lowCoord[i];
+        if(this->highCoord[i] < highCoord[i])
+            this->highCoord[i] = highCoord[i];
+    }
 }
 
 bool BoundingBox::hit(BoundingBox box)const
 {
-	for(int i=0;i<3;i++)
-	{
-		if(lowCoord[i] > box.highCoord[i] || highCoord[i]< box.lowCoord[i] )
-			return false;
-	}
-	return true;
+    for(int i=0;i<3;i++)
+    {
+        if(lowCoord[i] > box.highCoord[i] || highCoord[i]< box.lowCoord[i] )
+            return false;
+    }
+    return true;
 }
 
 bool BoundingBox::hit(const Vector3& invDir, const Vector3& origin, real_t t0, real_t t1, const uint32_t dirIsNeg[3])const
 {
-	float tmin =  (operator[](	dirIsNeg[0]).x - origin.x) * invDir.x;
+    float tmin =  (operator[](    dirIsNeg[0]).x - origin.x) * invDir.x;
     float tmax =  (operator[](1-dirIsNeg[0]).x - origin.x) * invDir.x;
     float tymin = (operator[](  dirIsNeg[1]).y - origin.y) * invDir.y;
     float tymax = (operator[](1-dirIsNeg[1]).y - origin.y) * invDir.y;
@@ -81,38 +103,38 @@ bool BoundingBox::hit(const Vector3& invDir, const Vector3& origin, real_t t0, r
     if (tzmax < tmax)
         tmax = tzmax;
 
-	if(tmax<t0 || tmin>t1)
-		return false;
+    if(tmax<t0 || tmin>t1)
+        return false;
 
-	return tmin <= tmax + 1e-5;//SLOP
+    return tmin <= tmax + 1e-5;//SLOP
 }
 
 bool BoundingBox::hit(const Ray& r, real_t t0, real_t t1)const
 {
-	if(r.d.x == 0 || r.d.y == 0 || r.d.z == 0 )
-		return true;
+    if(r.d.x == 0 || r.d.y == 0 || r.d.z == 0 )
+        return true;
 
-	real_t xmin = (lowCoord.x - r.e.x)/r.d.x;
-	real_t xmax = (highCoord.x - r.e.x)/r.d.x;
+    real_t xmin = (lowCoord.x - r.e.x)/r.d.x;
+    real_t xmax = (highCoord.x - r.e.x)/r.d.x;
 
-	real_t ymin = (lowCoord.y - r.e.y)/r.d.y;
-	real_t ymax = (highCoord.y - r.e.y)/r.d.y;
+    real_t ymin = (lowCoord.y - r.e.y)/r.d.y;
+    real_t ymax = (highCoord.y - r.e.y)/r.d.y;
 
-	real_t zmin = (lowCoord.z - r.e.z)/r.d.z;
-	real_t zmax = (highCoord.z - r.e.z)/r.d.z;
-	
-	if(xmin>xmax)
-		std::swap(xmin,xmax);
-	if(ymin>ymax)
-		std::swap(ymin,ymax);
-	if(zmin>zmax)
-		std::swap(zmin,zmax);
+    real_t zmin = (lowCoord.z - r.e.z)/r.d.z;
+    real_t zmax = (highCoord.z - r.e.z)/r.d.z;
+    
+    if(xmin>xmax)
+        std::swap(xmin,xmax);
+    if(ymin>ymax)
+        std::swap(ymin,ymax);
+    if(zmin>zmax)
+        std::swap(zmin,zmax);
 
-	real_t maximin = std::max(std::max(xmin,ymin),zmin);
-	real_t minimax = std::min(std::min(xmax,ymax),zmax);
-	if(minimax<t0 || maximin>t1)
-		return false;
+    real_t maximin = std::max(std::max(xmin,ymin),zmin);
+    real_t minimax = std::min(std::min(xmax,ymax),zmax);
+    if(minimax<t0 || maximin>t1)
+        return false;
 
-	return maximin <= minimax + 1e-5;
+    return maximin <= minimax + 1e-5;
 }
 }
