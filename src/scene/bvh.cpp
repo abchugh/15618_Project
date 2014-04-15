@@ -1,4 +1,5 @@
 #include "bvh.hpp"
+
 #include "scene/scene.hpp"
 #include <SDL_timer.h>
 #include <queue>
@@ -10,7 +11,8 @@ using namespace std;
 namespace _462 {
 	
 #define NUM_IN_PRE_QUEUE 7
-
+#define ENABLED_TIME_LOGS
+ispc::BVHPrimitiveInfo *buildDataBuffer;
 
 //#define ENABLED_TIME_LOGS
 #ifdef ENABLED_TIME_LOGS
@@ -47,6 +49,20 @@ namespace _462 {
             deleteRecursive(node->children[1]);
         delete node;
     }
+    
+    void to_array(Vector3 v, ispc::float3& d) {
+	d.v[0] = v.x;
+	d.v[1] = v.y;
+	d.v[2] = v.z;
+    }
+
+    ispc::BVHPrimitiveInfo* partition(int start, int end, int dim, float mid, ispc::BVHPrimitiveInfo* buildData, ispc::BVHPrimitiveInfo *buildDataBuffer) {
+	int split = 0;
+	memcpy(buildDataBuffer + start, buildData + start, (end - start) * sizeof(ispc::BVHPrimitiveInfo));
+	split = ispc::partition_ispc(start, end, dim, mid, buildDataBuffer, buildData);
+	return buildData + split;
+    }
+
     BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL), root(NULL)
     {
         time_t startTime = SDL_GetTicks();
@@ -63,10 +79,20 @@ namespace _462 {
             return;
         
         // Initialize _buildData_ array for primitives
-        vector<BVHPrimitiveInfo> buildData;
+        vector<ispc::BVHPrimitiveInfo> buildData;
         buildData.reserve(primitives.size());
+	buildDataBuffer = new ispc::BVHPrimitiveInfo[primitives.size()];
         for (uint32_t i = 0; i < primitives.size(); ++i) {
-            buildData.push_back(BVHPrimitiveInfo(i, primitives[i]->bb));
+	    ispc::BVHPrimitiveInfo info;
+	    info.primitiveNumber = i;
+
+	    BoundingBox b = primitives[i]->bb;
+	    Vector3 v_centroid = .5f * b.lowCoord + .5f * b.highCoord;
+	    to_array(v_centroid, info.centroid);
+	    to_array(b.lowCoord, info.lowCoord);
+	    to_array(b.highCoord, info.highCoord);
+
+            buildData.push_back(info);
         }
         uint32_t totalNodes = 0;
         vector< Geometry* > orderedPrims(primitives.size());
@@ -183,7 +209,7 @@ namespace _462 {
         endTime = SDL_GetTicks();
         
         printf("Ended parallel tree phase at %ld \n", endTime-startTime);
-        /*printf("Phases %lld %lld %lld %lld %lld %lld %lld %lld %lld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));*/
+        printf("Phases %lld %lld %lld %lld %lld %lld %lld %lld %lld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
         for(int i=0;i<MAX_THREADS;i++) if(busy[i]!=0)
             printf("%ld ", busy[i]);
         printf("\n");
@@ -199,6 +225,9 @@ namespace _462 {
         assert(offset == totalNodes);
         endTime = SDL_GetTicks();
         
+	delete [] buildDataBuffer;
+	buildDataBuffer = NULL;
+
         printf("Done Building BVH at %ld \n", endTime-startTime);
     }
 
@@ -215,9 +244,9 @@ namespace _462 {
     struct ComparePoints {
         ComparePoints(int d) { dim = d; }
         int dim;
-        bool operator()(const BVHPrimitiveInfo &a,
-                        const BVHPrimitiveInfo &b) const {
-            return a.centroid[dim] < b.centroid[dim];
+        bool operator()(const ispc::BVHPrimitiveInfo &a,
+                        const ispc::BVHPrimitiveInfo &b) const {
+            return a.centroid.v[dim] < b.centroid.v[dim];
         }
     };
 
@@ -254,7 +283,7 @@ namespace _462 {
         }
     }
     //TODO:convert into #define to check for perf improvement?
-    void BVHAccel::buildLeaf(vector<BVHPrimitiveInfo> &buildData, uint32_t start,
+    void BVHAccel::buildLeaf(vector<ispc::BVHPrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox)
     {
         GetTime(primitiveStart);
@@ -264,10 +293,11 @@ namespace _462 {
         
         AddTimeSincePreviousTick(tP);
     }
-    BVHBuildNode *BVHAccel::recursiveBuild( vector<BVHPrimitiveInfo> &buildData, uint32_t start,
+    BVHBuildNode *BVHAccel::recursiveBuild( vector<ispc::BVHPrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
-            
-        //printf("%d %d %d\n", start,end, omp_get_thread_num());
+        
+	if (start == end)
+	    printf("%d %d %d\n", start,end, omp_get_thread_num());
 
         assert(start != end);
         GetTime(startTime);
@@ -304,7 +334,9 @@ namespace _462 {
 
             // Partition primitives into two sets and build children
             uint32_t mid = (start + end) / 2;
-            if (centroidBounds.highCoord[dim] == centroidBounds.lowCoord[dim]) {
+	    // Change == to < to fix bug. There might be case that low is too close to high that partition
+	    // can't really separate them.
+            if (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim] < 1e-5) {
                 buildLeaf(buildData,start,end, orderedPrims,node,bbox);
                 goto finishUp;
             }
@@ -314,9 +346,8 @@ namespace _462 {
             case SPLIT_MIDDLE: {
                 // Partition primitives through node's midpoint
                 double pmid = .5f * (centroidBounds.lowCoord[dim] + centroidBounds.highCoord[dim]);
-                BVHPrimitiveInfo *midPtr = std::partition(&buildData[start],
-                                                          &buildData[end-1]+1,
-                                                          CompareToMid(dim, pmid));
+
+                ispc::BVHPrimitiveInfo *midPtr = partition(start, end, dim, pmid, &buildData[0], buildDataBuffer);
                 mid = midPtr - &buildData[0];
                 if (mid != start && mid != end)
                     // for lots of prims with large overlapping bounding boxes, this
@@ -357,9 +388,10 @@ namespace _462 {
                     for (uint32_t j = 0; j < nPrimitives; ++j) {
                         uint32_t i = j + start;
                         int b = nBuckets *
-                            ((buildData[i].centroid[dim] - centroidBounds.lowCoord[dim]) /
+                            ((buildData[i].centroid.v[dim] - centroidBounds.lowCoord[dim]) /
                              (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim]));
                         if (b == nBuckets) b = nBuckets-1;
+
                         assert(b >= 0 && b < nBuckets);
                         buckets[b].count++;
                         buckets[b].bounds.AddBox(buildData[i].lowCoord, buildData[i].highCoord);
@@ -399,11 +431,17 @@ namespace _462 {
                     // Either create leaf or split primitives at selected SAH bucket
                     if (nPrimitives > maxPrimsInNode ||
                         minCost < nPrimitives) {
-                        BVHPrimitiveInfo *pmid = std::partition(&buildData[start],
-                            &buildData[end-1]+1,
-                            CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
+			float bmid = (1 + minCostSplit) * 
+			    (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim])
+			    / nBuckets + centroidBounds.lowCoord[dim];
+
+			ispc::BVHPrimitiveInfo *pmid = partition(start, end, dim, bmid, &buildData[0], buildDataBuffer);
                         mid = pmid - &buildData[0];
                         
+			if (start == mid || mid == end)
+			    printf("%d - %d - %d\n%d: l: %f; h: %f; m: %f\n", start, mid, end, minCostSplit,
+				   centroidBounds.lowCoord[dim], centroidBounds.highCoord[dim], bmid);
+
                         AddTimeSincePreviousTick(t7);
                     }
                 
@@ -482,7 +520,7 @@ finishUp:
         return node;
     }
 
-    BVHBuildNode *BVHAccel::fastRecursiveBuild( vector<BVHPrimitiveInfo> &buildData, uint32_t start,
+    BVHBuildNode *BVHAccel::fastRecursiveBuild( vector<ispc::BVHPrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
         assert(end-start>100);
         //printf("%d %d %d\n", start,end, omp_get_thread_num());
@@ -548,7 +586,7 @@ finishUp:
             for (uint32_t i = s; i < e; ++i)
             {
                 int b = nBuckets *
-                    ((buildData[i].centroid[dim] - centroidBounds.lowCoord[dim]) /
+                    ((buildData[i].centroid.v[dim] - centroidBounds.lowCoord[dim]) /
                         (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim]));
                 if (b == nBuckets) b = nBuckets-1;
                 assert(b >= 0 && b < nBuckets);
@@ -624,9 +662,14 @@ finishUp:
         // Either create leaf or split primitives at selected SAH bucket
         if (nPrimitives > maxPrimsInNode ||
             minCost < nPrimitives) {
+	    float bmid = (1 + minCostSplit) * (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim])
+            		/ nBuckets + centroidBounds.lowCoord[dim];
+	    ispc::BVHPrimitiveInfo *pmid = partition(start, end, dim, bmid, &buildData[0], buildDataBuffer);
+	    /*
             BVHPrimitiveInfo *pmid = std::partition(&buildData[start],
                 &buildData[end-1]+1,
                 CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
+	    */
             mid = pmid - &buildData[0];
                         
         }

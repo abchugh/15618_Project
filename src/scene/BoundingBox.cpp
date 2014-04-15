@@ -17,14 +17,14 @@ void BoundingBox::AddPoint(Vector3 point)
     }
 }
 
-void BoundingBox::AddPoint(float point[3]) 
+void BoundingBox::AddPoint(ispc::float3 point) 
 {
     for(int i=0;i<3;i++)
     {
-        if(lowCoord[i]>point[i])
-        lowCoord[i] = point[i];
-        if(highCoord[i]<point[i])
-        highCoord[i] = point[i];
+        if(lowCoord[i]>point.v[i])
+        lowCoord[i] = point.v[i];
+        if(highCoord[i]<point.v[i])
+        highCoord[i] = point.v[i];
     }
 }
 
@@ -61,14 +61,14 @@ void BoundingBox::AddBox(BoundingBox box)
     }
 }
 
-void BoundingBox::AddBox(float lowCoord[3], float highCoord[3])
+void BoundingBox::AddBox(ispc::float3 lowCoord, ispc::float3 highCoord)
 {
     for(int i=0;i<3;i++)
     {
-        if(this->lowCoord[i] > lowCoord[i])
-            this->lowCoord[i] = lowCoord[i];
-        if(this->highCoord[i] < highCoord[i])
-            this->highCoord[i] = highCoord[i];
+        if(this->lowCoord[i] > lowCoord.v[i])
+            this->lowCoord[i] = lowCoord.v[i];
+        if(this->highCoord[i] < highCoord.v[i])
+            this->highCoord[i] = highCoord.v[i];
     }
 }
 

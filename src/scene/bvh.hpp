@@ -2,6 +2,8 @@
 #define _462_BVH_HPP_
 
 #include "math/vector.hpp"
+#include "partition_ispc.h"
+
 #include <vector>
 #include <deque>
 #include <queue>
@@ -89,11 +91,11 @@ namespace _462 {
         ~BVHAccel();
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
     private:
-        BVHBuildNode *recursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
+        BVHBuildNode *recursiveBuild(std::vector<ispc::BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
-        BVHBuildNode *fastRecursiveBuild(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
+        BVHBuildNode *fastRecursiveBuild(std::vector<ispc::BVHPrimitiveInfo> &buildData, uint32_t start, uint32_t end,
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
-        void buildLeaf(std::vector<BVHPrimitiveInfo> &buildData, uint32_t start,
+        void buildLeaf(std::vector<ispc::BVHPrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
         
@@ -101,10 +103,12 @@ namespace _462 {
         enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };
         SplitMethod splitMethod;
         std::vector<Geometry*> primitives;
-        BVHBuildNode *root;
         LinearBVHNode *nodes;
+        BVHBuildNode *root;
         std::deque<queueData> q[MAX_THREADS];
         std::priority_queue<queueData> pq;
+
+
     };
 }/* _462 */
 
