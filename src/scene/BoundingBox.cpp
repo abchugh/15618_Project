@@ -17,7 +17,7 @@ void BoundingBox::AddPoint(Vector3 point)
     }
 }
 
-void BoundingBox::AddPoint(ispc::float3 point) 
+void BoundingBox::AddPoint(const ispc::float3& point) 
 {
     for(int i=0;i<3;i++)
     {
@@ -61,7 +61,7 @@ void BoundingBox::AddBox(BoundingBox box)
     }
 }
 
-void BoundingBox::AddBox(ispc::float3 lowCoord, ispc::float3 highCoord)
+void BoundingBox::AddBox(const ispc::float3& lowCoord, const ispc::float3& highCoord)
 {
     for(int i=0;i<3;i++)
     {

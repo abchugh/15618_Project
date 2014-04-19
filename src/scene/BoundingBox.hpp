@@ -14,12 +14,12 @@ public:
     //Extend the bounding box to accomodate the point
     void AddPoint(Vector3 point);
     
-    void AddPoint(ispc::float3 point);
+    void AddPoint(const ispc::float3& point);
 
     //combine with another bounding box to form a bigger bounding volume
     void AddBox(BoundingBox box);
 
-    void AddBox(ispc::float3 lowCoord, ispc::float3 highCoord);
+    void AddBox(const ispc::float3& lowCoord, const ispc::float3& highCoord);
     
     //hit testing on the box
     bool hit(const Ray& r, real_t t0, real_t t1)const;
