@@ -8,7 +8,7 @@ if(UNIX)
 	add_custom_command(
 		OUTPUT ${ISPC_OBJ} ${ISPC_HEADER}
 		MAIN_DEPENDENCY ${ISPC_FILES}
-		COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_FILES} -o ${CMAKE_CURRENT_LIST_DIR}/${ISPC_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HEADER}
+		COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_FILES} -o ${ISPC_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HEADER}
 	)
 endif (UNIX)
 
@@ -22,22 +22,13 @@ if(WIN32)
 	add_custom_command(
 		OUTPUT ${ISPC_OBJ} ${ISPC_HEADER}
 		MAIN_DEPENDENCY ${ISPC_FILES}
-		COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_FILES} -o ${CMAKE_CURRENT_LIST_DIR}/${ISPC_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HEADER}
+		COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_FILES} -o ${ISPC_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HEADER}
 	)
 endif (WIN32)
-# include FindISPC.cmake (doesn't help)
-#include(${CMAKE_SOURCE_DIR}/cmake/FindISPC.cmake)
-#ispc_compile(${ISPC_FILES} "-O2 --target=sse4-x2 --arch=x86-64" PARTITION PARTITION_H)
+
 
 add_library(scene material.cpp mesh.cpp model.cpp scene.cpp sphere.cpp
-            triangle.cpp ray.cpp bvh.cpp BoundingBox.cpp ${ISPC_FILES})
-
-set_source_files_properties(
-	${ISPC_HEADER}
-	PROPERTIES
-	EXTERNAL_OBJECT TRUE
-	GENERATED TRUE
-)
+            triangle.cpp ray.cpp bvh.cpp BoundingBox.cpp ${ISPC_OBJ} ${ISPC_PATH})
 
 set_source_files_properties(
 	${ISPC_OBJ}
@@ -45,12 +36,11 @@ set_source_files_properties(
 	EXTERNAL_OBJECT TRUE
 	GENERATED TRUE
 )
-
-add_library(ispc_obj STATIC ${ISPC_OBJ})
-set_target_properties(
-  ispc_obj
-  PROPERTIES
-  LINKER_LANGUAGE C
+set_source_files_properties(
+	${ISPC_PATH}
+	PROPERTIES
+	HEADER_FILE_ONLY TRUE
+	GENERATED TRUE
 )
 
 #target_link_libraries(scene ispc_obj)
