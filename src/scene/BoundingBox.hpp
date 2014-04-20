@@ -41,7 +41,6 @@ public:
         else
             return highCoord;
     }
-private:
     inline real_t extent(int dim)const
     {
         return highCoord[dim]-lowCoord[dim];
