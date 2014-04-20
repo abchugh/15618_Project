@@ -50,29 +50,29 @@ export uniform int partition_ispc(uniform int start, uniform int end, uniform in
     uniform int larger_offset = 0;
     
     foreach (i = 0 ... nPrimitives) {
-	int smaller = compareToMid(buildData[start + i], dim, mid);
-	int larger = 1 - smaller;
+        int smaller = compareToMid(buildData[start + i], dim, mid);
+        int larger = 1 - smaller;
 
-	int gang_smaller_offset = exclusive_scan_add(smaller);
-	int gang_larger_offset = exclusive_scan_add(larger);
+        int gang_smaller_offset = exclusive_scan_add(smaller);
+        int gang_larger_offset = exclusive_scan_add(larger);
 
-	int des;
+        int des;
 
-	//print("s: %d;\te: %d\n", start, end);
-	//print("%d: %d - %d %d\n", i, smaller, smaller_offset, larger_offset);
-	//print("%d - %d\n", gang_smaller_offset, gang_larger_offset);
-	if (smaller)
-	    des = start + smaller_offset + gang_smaller_offset;
-	else
-	    des = end - 1 - larger_offset - gang_larger_offset;
+        //print("s: %d;\te: %d\n", start, end);
+        //print("%d: %d - %d %d\n", i, smaller, smaller_offset, larger_offset);
+        //print("%d - %d\n", gang_smaller_offset, gang_larger_offset);
+        if (smaller)
+	        des = start + smaller_offset + gang_smaller_offset;
+        else
+	        des = end - 1 - larger_offset - gang_larger_offset;
 
-	result[des] = buildData[start + i];
+        result[des] = buildData[start + i];
 	
-	//print("des: %d\n", des);
-	//print("====\n");
+        //print("des: %d\n", des);
+        //print("====\n");
 
-	smaller_offset += reduce_add(smaller);
-	larger_offset += reduce_add(larger);
+        smaller_offset += reduce_add(smaller);
+        larger_offset += reduce_add(larger);
     }
     
     return smaller_offset + start;

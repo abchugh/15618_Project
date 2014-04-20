@@ -71,12 +71,12 @@ namespace _462 {
         d.v[2] = v.z;
     }
 #else
-    struct CompareToMid {
-        CompareToMid(int d, float m) { dim = d; mid = m; }
+    struct CompareToVal {
+        CompareToVal(int d, float v) { dim = d; val = v; }
         int dim;
-        float mid;
+        float val;
         bool operator()(const PrimitiveInfo &a) const {
-            return a.centroid[dim] < mid;
+            return a.centroid[dim] < val;
         }
     };
     
@@ -99,18 +99,14 @@ namespace _462 {
         const BoundingBox &centroidBounds;
     };
     bool CompareToBucket::operator()(const PrimitiveInfo &p) const {
-        int b = nBuckets * ((p.centroid[dim] - centroidBounds.lowCoord[dim]) /
-            (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim]));
+        int b = nBuckets * ((p.centroid[dim] - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
         if (b == nBuckets) b = nBuckets-1;
         assert(b >= 0 && b < nBuckets);
         return b <= splitBucket;
     }
-    /*inline PrimitiveInfo* partition(int start, int end, int dim, float mid, PrimitiveInfo* buildData, PrimitiveInfo *buildDataBuffer) {
-        BVHPrimitiveInfo *pmid = std::partition(&buildData[start],
-							&buildData[end-1]+1,
-							CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
-	mid = pmid - &buildData[0];
-    }*/
+    inline PrimitiveInfo* partition(int start, int end, int dim, float mid, PrimitiveInfo* buildData, PrimitiveInfo *buildDataBuffer) {
+       return std::partition(&buildData[start], &buildData[end-1]+1, CompareToVal(dim, mid));
+    }
 #endif
 
     BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL), root(NULL)
@@ -183,7 +179,7 @@ namespace _462 {
 
         printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
         int blah = 0;
-//#pragma omp parallel 
+#pragma omp parallel 
         {
 
             int tid = omp_get_thread_num();
@@ -304,6 +300,14 @@ namespace _462 {
             nodes = NULL;
         }
     }
+    static inline void AddBox(const PrimitiveInfo& buildData, BoundingBox & box)
+    {
+#ifdef ISPC
+                box.AddBox(buildData.lowCoord, buildData.highCoord);
+#else
+                box.AddBox(buildData.bounds);
+#endif
+    }
     //TODO:convert into #define to check for perf improvement?
     void BVHAccel::buildLeaf(vector<PrimitiveInfo> &buildData, uint32_t start,
         uint32_t end, vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox)
@@ -339,11 +343,8 @@ namespace _462 {
             // Compute bounds of all primitives in BVH node
             BoundingBox bbox;
             for (uint32_t i = start; i < end; ++i)
-#ifdef ISPC
-                bbox.AddBox(buildData[i].lowCoord, buildData[i].highCoord);
-#else
-                bbox.AddBox(buildData[i].bounds);
-#endif
+                AddBox(buildData[i], bbox);
+
             AddTimeSincePreviousTick(t1);
 
             if (nPrimitives == 1) {
@@ -362,7 +363,7 @@ namespace _462 {
                 uint32_t mid = (start + end) / 2;
                 // Change == to < to fix bug. There might be case that low is too close to high that partition
                 // can't really separate them.
-                if (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim] < 1e-5) {
+                if (centroidBounds.extent(dim) < 1e-5) {
                     buildLeaf(buildData,start,end, orderedPrims,node,bbox);
                     goto finishUp;
                 }
@@ -372,12 +373,9 @@ namespace _462 {
                 case SPLIT_MIDDLE: {
                     // Partition primitives through node's midpoint
                     double pmid = .5f * (centroidBounds.lowCoord[dim] + centroidBounds.highCoord[dim]);
-
-#ifdef ISPC
+                    
                     PrimitiveInfo *midPtr = partition(start, end, dim, pmid, &buildData[0], buildDataBuffer);
-#else
-                    BVHPrimitiveInfo *midPtr = std::partition(&buildData[start], &buildData[end-1]+1, CompareToMid(dim, pmid));
-#endif
+
                     mid = midPtr - &buildData[0];
                     if (mid != start && mid != end)
                         // for lots of prims with large overlapping bounding boxes, this
@@ -424,17 +422,12 @@ namespace _462 {
 #endif
 
                             int b = nBuckets *
-                                ((val - centroidBounds.lowCoord[dim]) /
-                                (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim]));
+                                ( (val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
                             if (b == nBuckets) b = nBuckets-1;
 
                             assert(b >= 0 && b < nBuckets);
                             buckets[b].count++;
-#ifdef ISPC
-                            buckets[b].bounds.AddBox(buildData[i].lowCoord, buildData[i].highCoord);
-#else
-                            buckets[b].bounds.AddBox(buildData[i].bounds);
-#endif
+                            AddBox(buildData[i], buckets[b].bounds);
 
                         }
                         AddTimeSincePreviousTick(t4);
@@ -471,16 +464,9 @@ namespace _462 {
 
                         // Either create leaf or split primitives at selected SAH bucket
                         if (nPrimitives > maxPrimsInNode || minCost < nPrimitives) {
-
-#ifdef ISPC
-                            float bmid = (1 + minCostSplit) * 
-                                (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim])
-                                / nBuckets + centroidBounds.lowCoord[dim];
+                            
+                            float bmid = (minCostSplit + 1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
                             PrimitiveInfo *pmid = partition(start, end, dim, bmid, &buildData[0], buildDataBuffer);
-#else                 
-                            PrimitiveInfo *pmid = std::partition(&buildData[start], &buildData[end-1]+1,
-							CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
-#endif
 
                             mid = pmid - &buildData[0];
 
@@ -604,7 +590,7 @@ finishUp:
             bool done1 = false, done2 = false;
             int dim=0;
             float cost[nBuckets-1];    
-//#pragma omp parallel
+#pragma omp parallel
             {
                 GetTime(startT);
                 int threadNo = (uint32_t)omp_get_thread_num();
@@ -638,29 +624,20 @@ finishUp:
 #endif
 
                     int b = nBuckets *
-                        ((val - centroidBounds.lowCoord[dim]) /
-                        (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim]));
+                        ((val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
                     if (b == nBuckets) b = nBuckets-1;
                     assert(b >= 0 && b < nBuckets);
 
                     {
                         subBuckets[threadNo][b].count++;
-#ifdef ISPC
-                        subBuckets[threadNo][b].bounds.AddBox(buildData[i].lowCoord, buildData[i].highCoord);
-#else
-                        subBuckets[threadNo][b].bounds.AddBox(buildData[i].bounds);
-#endif
+                        AddBox(buildData[i],subBuckets[threadNo][b].bounds);
                     }
                 }
 
                 AddTimeSincePreviousTick(t4);
 
                 for (uint32_t i = s; i < e; ++i)
-#ifdef ISPC
-                    subBbox[threadNo].AddBox(buildData[i].lowCoord, buildData[i].highCoord);
-#else
-                    subBbox[threadNo].AddBox(buildData[i].bounds);
-#endif
+                    AddBox(buildData[i], subBbox[threadNo]);
 
                 if(!done1){
 #pragma omp critical
@@ -722,15 +699,9 @@ finishUp:
             // Either create leaf or split primitives at selected SAH bucket
             if (nPrimitives > maxPrimsInNode ||
                 minCost < nPrimitives) {
-#ifdef ISPC
-                    float bmid = (1 + minCostSplit) * (centroidBounds.highCoord[dim] - centroidBounds.lowCoord[dim])
-                        / nBuckets + centroidBounds.lowCoord[dim];
+                    
+                    float bmid = (minCostSplit+1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
                     PrimitiveInfo *pmid = partition(start, end, dim, bmid, &buildData[0], buildDataBuffer);
-#else
-                    PrimitiveInfo *pmid = std::partition(&buildData[start],
-                    &buildData[end-1]+1,
-                    CompareToBucket(minCostSplit, nBuckets, dim, centroidBounds));
-#endif
                     mid = pmid - &buildData[0];
 
             }
