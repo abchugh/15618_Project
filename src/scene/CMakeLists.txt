@@ -28,7 +28,7 @@ endif (WIN32)
 
 
 add_library(scene material.cpp mesh.cpp model.cpp scene.cpp sphere.cpp
-            triangle.cpp ray.cpp bvh.cpp BoundingBox.cpp ${ISPC_OBJ} ${ISPC_PATH})
+            triangle.cpp ray.cpp bvh.cpp bvhISPC.cpp bvhNonISPC.cpp BoundingBox.cpp ${ISPC_OBJ} ${ISPC_PATH})
 
 set_source_files_properties(
 	${ISPC_OBJ}

@@ -14,7 +14,6 @@ namespace _462 {
     
     #define NUM_IN_PRE_QUEUE 7
     #define ENABLED_TIME_LOGS
-    #define ISPC
     const int MAX_THREADS = 128;
 
     class Geometry;
@@ -84,9 +83,10 @@ namespace _462 {
 
 
 #ifdef ISPC
-    typedef ispc::BVHPrimitiveInfo PrimitiveInfo;
+    typedef ispc::BVHPrimitiveInfoList PrimitiveInfoList;
 #else
     typedef _462::BVHPrimitiveInfo PrimitiveInfo;
+    typedef std::vector<_462::BVHPrimitiveInfo> PrimitiveInfoList;
 #endif
 
     class BVHAccel
@@ -99,11 +99,11 @@ namespace _462 {
         ~BVHAccel();
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
     private:
-        BVHBuildNode *recursiveBuild(std::vector<PrimitiveInfo> &buildData, uint32_t start, uint32_t end,
+        BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
-        BVHBuildNode *fastRecursiveBuild(std::vector<PrimitiveInfo> &buildData, uint32_t start, uint32_t end,
+        BVHBuildNode *fastRecursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
-        void buildLeaf(std::vector<PrimitiveInfo> &buildData, uint32_t start,
+        void buildLeaf(PrimitiveInfoList &buildData, uint32_t start,
         uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
         

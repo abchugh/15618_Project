@@ -1,7 +1,12 @@
 #ifndef _462_BOUNDING_BOX_HPP_
 #define _462_BOUNDING_BOX_HPP_
 #include "math/vector.hpp"
+
+#define ISPC
+
+#ifdef ISPC
 #include "partition_ispc.h"
+#endif
 
 namespace _462 {
 class Ray;
@@ -10,16 +15,16 @@ class BoundingBox
 public:
     BoundingBox();
 
-
     //Extend the bounding box to accomodate the point
     void AddPoint(Vector3 point);
-    
-    void AddPoint(const ispc::float3& point);
+#ifdef ISPC
+    void AddCentroid(const ispc::BVHPrimitiveInfoList& list, int index);
+    void AddBox(const ispc::BVHPrimitiveInfoList& list, int index);
+#endif
 
     //combine with another bounding box to form a bigger bounding volume
     void AddBox(BoundingBox box);
 
-    void AddBox(const ispc::float3& lowCoord, const ispc::float3& highCoord);
     
     //hit testing on the box
     bool hit(const Ray& r, real_t t0, real_t t1)const;
@@ -44,6 +49,10 @@ public:
     inline real_t extent(int dim)const
     {
         return highCoord[dim]-lowCoord[dim];
+    }
+    inline Vector3 centroid()const
+    {
+        return 0.5f*lowCoord + 0.5f*highCoord;
     }
 };
 }

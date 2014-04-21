@@ -16,17 +16,43 @@ void BoundingBox::AddPoint(Vector3 point)
             highCoord[i] = point[i];
     }
 }
-
-void BoundingBox::AddPoint(const ispc::float3& point) 
+#ifdef ISPC
+void BoundingBox::AddCentroid(const ispc::BVHPrimitiveInfoList& list, int index)
 {
-    for(int i=0;i<3;i++)
-    {
-        if(lowCoord[i]>point.v[i])
-        lowCoord[i] = point.v[i];
-        if(highCoord[i]<point.v[i])
-        highCoord[i] = point.v[i];
-    }
+    if(this->lowCoord.x > list.centroidx[index])
+        this->lowCoord.x = list.centroidx[index];
+    if(this->highCoord.x < list.centroidx[index])
+        this->highCoord.x = list.centroidx[index];
+
+    if(this->lowCoord.y > list.centroidy[index])
+        this->lowCoord.y = list.centroidy[index];
+    if(this->highCoord.y < list.centroidy[index])
+        this->highCoord.y = list.centroidy[index];
+
+    if(this->lowCoord.z > list.centroidz[index])
+        this->lowCoord.z = list.centroidz[index];
+    if(this->highCoord.z < list.centroidz[index])
+        this->highCoord.z = list.centroidz[index];
 }
+
+void BoundingBox::AddBox(const ispc::BVHPrimitiveInfoList& list, int index)
+{
+    if(this->lowCoord.x > list.lowCoordx[index])
+        this->lowCoord.x = list.lowCoordx[index];
+    if(this->highCoord.x < list.highCoordx[index])
+        this->highCoord.x = list.highCoordx[index];
+
+    if(this->lowCoord.y > list.lowCoordy[index])
+        this->lowCoord.y = list.lowCoordy[index];
+    if(this->highCoord.y < list.highCoordy[index])
+        this->highCoord.y = list.highCoordy[index];
+
+    if(this->lowCoord.z > list.lowCoordz[index])
+        this->lowCoord.z = list.lowCoordz[index];
+    if(this->highCoord.z < list.highCoordz[index])
+        this->highCoord.z = list.highCoordz[index];
+}
+#endif
 
 real_t BoundingBox::SurfaceArea()const
 {
@@ -58,17 +84,6 @@ void BoundingBox::AddBox(BoundingBox box)
             lowCoord[i] = box.lowCoord[i];
         if(highCoord[i]<box.highCoord[i])
             highCoord[i] = box.highCoord[i];
-    }
-}
-
-void BoundingBox::AddBox(const ispc::float3& lowCoord, const ispc::float3& highCoord)
-{
-    for(int i=0;i<3;i++)
-    {
-        if(this->lowCoord[i] > lowCoord.v[i])
-            this->lowCoord[i] = lowCoord.v[i];
-        if(this->highCoord[i] < highCoord.v[i])
-            this->highCoord[i] = highCoord.v[i];
     }
 }
 

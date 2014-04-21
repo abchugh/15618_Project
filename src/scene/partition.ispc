@@ -1,56 +1,50 @@
+struct BVHPrimitiveInfoList {
+    int* primitiveNumber;
+    float* centroidx;
+    float* centroidy;
+    float* centroidz;
 
-typedef float<3> Vector3;
+    float* lowCoordx;
+    float* lowCoordy;
+    float* lowCoordz;
 
-struct BBox {
-    Vector3 lowCoord;
-    Vector3 highCoord;
-};
-
-struct BVHPrimitiveInfo {
-    int primitiveNumber;
-    Vector3 centroid;
-    Vector3 lowCoord;
-    Vector3 highCoord;
-};
-
-struct BucketInfo {
-    int count;
-    BBox bounds;
-};
-
-static inline void addPoint(BBox* bound, Vector3 point) {
-    bool<3> lowTest = bound->lowCoord < point;
-    bool<3> highTest = bound->highCoord > point;
-
-    bound->lowCoord = lowTest ? bound->lowCoord : point;
-    bound->highCoord = highTest ? bound->highCoord : point;
-}
-
-static inline void addBox(BBox* bound, BBox* add) {
-    bool<3> lowTest = bound->lowCoord < add->lowCoord;
-    bool<3> highTest = bound->highCoord > add->highCoord;
-
-    bound->lowCoord = lowTest ? bound->lowCoord : add->lowCoord;
-    bound->highCoord = highTest ? bound->highCoord : add->highCoord;
-}
-
-static inline int compareToMid(BVHPrimitiveInfo buildData, int dim, float m) {
-    return buildData.centroid[dim] < m;
-}
-
-export void hashBuckets(uniform int start, uniform int end, 
-			uniform BVHPrimitiveInfo buildData[], uniform int nBuckets) {
+    float* highCoordx;
+    float* highCoordy;
+    float* highCoordz;
     
+    int primCount;
+};
+static inline int copyFromLocation(BVHPrimitiveInfoList* result, int des, const BVHPrimitiveInfoList* buildData, int src) {
+    result->primitiveNumber[des] = buildData->primitiveNumber[src];
+
+    result->centroidx[des] = buildData->centroidx[src];
+    result->centroidy[des] = buildData->centroidy[src];
+    result->centroidz[des] = buildData->centroidz[src];
+
+    result->lowCoordx[des] = buildData->lowCoordx[src];
+    result->lowCoordy[des] = buildData->lowCoordy[src];
+    result->lowCoordz[des] = buildData->lowCoordz[src];
+          
+    result->highCoordx[des] = buildData->highCoordx[src];
+    result->highCoordy[des] = buildData->highCoordy[src];
+    result->highCoordz[des] = buildData->highCoordz[src];
 }
 
 export uniform int partition_ispc(uniform int start, uniform int end, uniform int dim, uniform float mid,
-		      uniform BVHPrimitiveInfo buildData[], uniform BVHPrimitiveInfo result[]) {
+		       uniform BVHPrimitiveInfoList buildData[], uniform BVHPrimitiveInfoList result[]) {
+                
     uniform int nPrimitives = end - start;
     uniform int smaller_offset = 0;
     uniform int larger_offset = 0;
-    
+    uniform float* compareDim = buildData[0].centroidx;
+    if(dim==1)
+        compareDim = buildData[0].centroidy;
+    if(dim==2)
+        compareDim = buildData[0].centroidz;
+    compareDim = compareDim + start;
+
     foreach (i = 0 ... nPrimitives) {
-        int smaller = compareToMid(buildData[start + i], dim, mid);
+        int smaller = compareDim[i]< mid;
         int larger = 1 - smaller;
 
         int gang_smaller_offset = exclusive_scan_add(smaller);
@@ -66,7 +60,8 @@ export uniform int partition_ispc(uniform int start, uniform int end, uniform in
         else
 	        des = end - 1 - larger_offset - gang_larger_offset;
 
-        result[des] = buildData[start + i];
+        copyFromLocation(result, des, buildData, start+i);
+        //result[des] = buildData[start + i];
 	
         //print("des: %d\n", des);
         //print("====\n");
