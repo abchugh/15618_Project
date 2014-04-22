@@ -1,6 +1,7 @@
 #include "bvh.hpp"
 #ifdef ISPC
 
+#include <string.h>
 #include "scene/scene.hpp"
 
 using namespace std;

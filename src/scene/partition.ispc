@@ -1,5 +1,5 @@
 struct BVHPrimitiveInfoList {
-    int* primitiveNumber;
+    unsigned int* primitiveNumber;
     float* centroidx;
     float* centroidy;
     float* centroidz;

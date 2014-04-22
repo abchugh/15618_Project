@@ -49,13 +49,13 @@ namespace _462 {
         delete node;
     }
     
-    inline void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly = false);
-    inline void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box);
-    inline void AddCentroid(const PrimitiveInfoList& buildData, int index, BoundingBox & box);
-    inline float getCentroidDim(const PrimitiveInfoList& buildData, int index, int dim);
-    inline uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim);
-    inline void clearList(PrimitiveInfoList& buildData);
-    inline unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer);
+    void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly = false);
+    void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box);
+    void AddCentroid(const PrimitiveInfoList& buildData, int index, BoundingBox & box);
+    float getCentroidDim(const PrimitiveInfoList& buildData, int index, int dim);
+    uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim);
+    void clearList(PrimitiveInfoList& buildData);
+    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer);
     
     BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL), root(NULL)
     {
