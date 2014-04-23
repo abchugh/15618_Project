@@ -15,10 +15,43 @@ namespace _462 {
                 return a.centroid.v[dim] < b.centroid.v[dim];
         }
     };*/
-    
+    void swapVals(PrimitiveInfoList& buildData, uint32_t i, uint32_t j)
+    {
+	swap(buildData.primitiveNumber[i],buildData.primitiveNumber[j]); 
+	
+	swap(buildData.centroidx[i],buildData.centroidx[j]); 
+	swap(buildData.centroidy[i],buildData.centroidy[j]); 
+	swap(buildData.centroidz[i],buildData.centroidz[j]); 
+	
+	swap(buildData.lowCoordx[i],buildData.lowCoordx[j]); 
+	swap(buildData.lowCoordy[i],buildData.lowCoordy[j]); 
+	swap(buildData.lowCoordz[i],buildData.lowCoordz[j]); 
+	
+	swap(buildData.highCoordx[i],buildData.highCoordx[j]); 
+	swap(buildData.highCoordy[i],buildData.highCoordy[j]); 
+	swap(buildData.highCoordz[i],buildData.highCoordz[j]); 
+    }
     unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer) {
-
-        memcpy(buildDataBuffer.primitiveNumber + start, buildData.primitiveNumber + start, (end - start) * sizeof(uint32_t));
+	float *compareDim = buildData.centroidx;
+	if(dim == 1)
+		compareDim = buildData.centroidy;
+	if(dim == 2)
+		compareDim = buildData.centroidz;
+	uint32_t front = start, back = end-1; 
+	while(front<back)
+	{
+		if(compareDim[front]<mid)
+			front++;
+		else if(compareDim[back]>=mid)
+			back--;
+		else
+		{
+			swapVals(buildData, front,back);
+			front++;back--;
+		}
+	}
+	return front;
+       /* memcpy(buildDataBuffer.primitiveNumber + start, buildData.primitiveNumber + start, (end - start) * sizeof(uint32_t));
         
         memcpy(buildDataBuffer.centroidx + start, buildData.centroidx + start, (end - start) * sizeof(float));
         memcpy(buildDataBuffer.centroidy + start, buildData.centroidy + start, (end - start) * sizeof(float));
@@ -32,7 +65,8 @@ namespace _462 {
         memcpy(buildDataBuffer.highCoordy + start, buildData.highCoordy + start, (end - start) * sizeof(float));
         memcpy(buildDataBuffer.highCoordz + start, buildData.highCoordz + start, (end - start) * sizeof(float));
 
-        return ispc::partition_ispc(start, end, dim, mid, buildDataBuffer, buildData);
+        return ispc::partition_ispc(start, end, dim, mid, buildDataBuffer, buildData);*/
+		
     }
     
     void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly)

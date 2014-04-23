@@ -125,7 +125,10 @@ namespace _462 {
         endTime = SDL_GetTicks();
         printf("Started parallel tree phase  at %ld \n", endTime-startTime);
         time_t busy[MAX_THREADS] = {0}, idle[MAX_THREADS] = {0}, idleX[MAX_THREADS] = {0};
-
+#ifdef ENABLED_TIME_LOGS
+        printf("Phases %lld %lld %lld %lld %lld %lld %lld %lld %lld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
+#endif
+//exit(0);        
         printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
         int blah = 0;
 #pragma omp parallel
