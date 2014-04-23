@@ -51,13 +51,19 @@ namespace _462 {
 			list.push_back(PrimitiveInfo(i, primitives[i]->bb));
 		}
     }
-    void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t index, BoundingBox & box)
     {
         box.AddBox(buildData[index].bounds);
     }
-    void AddCentroid(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box)
     {
-        box.AddPoint(buildData[index].centroid);
+        for(uint32_t i=start; i<end; i++)
+            box.AddBox(buildData[i].bounds);
+    }
+    void AddCentroid(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box)
+    {
+        for(uint32_t i=start; i<end; i++)
+            box.AddPoint(buildData[i].centroid);
     }
     uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim)
     {

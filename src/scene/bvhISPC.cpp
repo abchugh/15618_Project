@@ -32,8 +32,7 @@ namespace _462 {
         memcpy(buildDataBuffer.highCoordy + start, buildData.highCoordy + start, (end - start) * sizeof(float));
         memcpy(buildDataBuffer.highCoordz + start, buildData.highCoordz + start, (end - start) * sizeof(float));
 
-        return ispc::partition_ispc(start, end, dim, mid, &buildDataBuffer, &buildData);
-       return 0;
+        return ispc::partition_ispc(start, end, dim, mid, buildDataBuffer, buildData);
     }
     
     void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly)
@@ -71,13 +70,39 @@ namespace _462 {
             list.highCoordz[i] =  primitives[i]->bb.highCoord.z;
         }
     }
-    void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t index, BoundingBox & box)
     {
         box.AddBox(buildData,index);
     }
-    void AddCentroid(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
+    void toArray(const Vector3& vec, ispc::float3& arr)
     {
-        box.AddCentroid(buildData, index);
+        arr.v[0] = vec[0];
+        arr.v[1] = vec[1];
+        arr.v[2] = vec[2];
+    }
+    void toVector(const ispc::float3& arr, Vector3& vec)
+    {
+        vec[0] = arr.v[0];
+        vec[1] = arr.v[1];
+        vec[2] = arr.v[2];
+    }
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box)
+    {
+        ispc::float3 low, high;
+        toArray(box.lowCoord , low);
+        toArray(box.highCoord, high);
+        ispc::AddBox(low, high, buildData, start,end);
+        toVector(low,box.lowCoord);
+        toVector(high,box.highCoord);
+    }
+    void AddCentroid(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box)
+    {
+        ispc::float3 low, high;
+        toArray(box.lowCoord , low);
+        toArray(box.highCoord, high);
+        ispc::AddCentroid(low, high, buildData, start,end);
+        toVector(low,box.lowCoord);
+        toVector(high,box.highCoord);
     }
     template<class T>
     static void reorder(T* arr, int* order, int size)

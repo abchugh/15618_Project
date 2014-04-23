@@ -50,13 +50,29 @@ namespace _462 {
     }
     
     void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly = false);
-    void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box);
-    void AddCentroid(const PrimitiveInfoList& buildData, int index, BoundingBox & box);
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box);
+    void AddCentroid(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box);
+    
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t index, BoundingBox & box);
+    
     float getCentroidDim(const PrimitiveInfoList& buildData, int index, int dim);
     uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim);
     void clearList(PrimitiveInfoList& buildData);
     unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer);
     
+
+    bool queueData::updateStatus(queueData& data)
+    {
+        bool isValid = (*data.status==USE_AND_DELETE || *data.status==USE_AND_DONT_DELETE);
+        if(*data.status==USE_AND_DELETE || *data.status==DONT_USE_AND_DELETE) {
+            delete data.status;
+            data.status = NULL;
+        }
+        else
+            *data.status = DONT_USE_AND_DELETE;
+        return isValid;
+    }
+
     BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL), root(NULL)
     {
         time_t startTime = SDL_GetTicks();
@@ -84,8 +100,8 @@ namespace _462 {
         vector< Geometry* > orderedPrims(primitives.size());
 
         queueData rootData = {0, static_cast<uint32_t>(primitives.size()),NULL, true, NULL };
-        rootData.isValid = new bool;
-        *rootData.isValid = true;
+        rootData.status = new char;
+        *rootData.status = USE_AND_DELETE;
         pq.push(rootData);
         //q[0].push_back(rootData);
 
@@ -95,7 +111,8 @@ namespace _462 {
         {
             queueData data = pq.top();
             if(data.end-data.start<=100)break;
-            delete data.isValid;
+            bool isValid = queueData::updateStatus(data);
+            assert(isValid);
             pq.pop();
             BVHBuildNode *node = fastRecursiveBuild(buildData, data.start, data.end, &totalNodes, orderedPrims, 
                 data.parent, data.isFirstChild);
@@ -130,30 +147,27 @@ namespace _462 {
                     {
                         data = q[tid].back();
                         q[tid].pop_back();
-                        if(!*data.isValid) {
-                            delete data.isValid;
-                            data.isValid = NULL;
-                            continue;
+
+                        bool isValid = queueData::updateStatus(data);
+
+                        if(isValid)
+                        {
+                            working |= (1<<tid);
+                            foundWork = true;
+                            break;
                         }
-                        *data.isValid = false;
-                        working |= (1<<tid);
-                        foundWork = true;
-                        break;
                     }
                     if(!foundWork) while(!pq.empty())
                     {    
                         data = pq.top();    
                         pq.pop();
-                        if(*data.isValid==false) {
-                            delete data.isValid;
-                            data.isValid = NULL;
-                            continue;
+                        bool isValid = queueData::updateStatus(data);
+                        if(isValid)
+                        {
+                            working |= (1<<tid);
+                            foundWork = true;
+                            break;
                         }
-                        *data.isValid = false;
-
-                        working |= (1<<tid);
-                        foundWork = true;
-                        break;
                     }
                     if(!foundWork)
                         working &= 0xFFFF - (1<<tid);
@@ -276,8 +290,7 @@ namespace _462 {
 
             // Compute bounds of all primitives in BVH node
             BoundingBox bbox;
-            for (uint32_t i = start; i < end; ++i)
-                AddBox(buildData, i, bbox);
+            AddBox(buildData, start, end, bbox);
 
             AddTimeSincePreviousTick(t1);
 
@@ -287,8 +300,7 @@ namespace _462 {
             else {
                 // Compute bound of primitive centroids, choose split dimension _dim_
                 BoundingBox centroidBounds;
-                for (uint32_t i = start; i < end; ++i)
-                    AddCentroid(buildData, i, centroidBounds);
+                AddCentroid(buildData, start, end, centroidBounds);
 
                 int dim = centroidBounds.MaximumExtent();
                 AddTimeSincePreviousTick(t2);
@@ -426,20 +438,26 @@ namespace _462 {
 
                 if(numInternalBranches==1)
                 {            
-                    child2Data.isValid = new bool;
-                    *child2Data.isValid = true;
+                    child2Data.status = new char;
+                    *child2Data.status = USE_AND_DELETE;
                     q[omp_get_thread_num()].push_back(child2Data);
 
                     queueData top;
 #pragma omp critical(queueUpdate)
                     {
                         if((int)pq.size()<omp_get_max_threads())
+                        {
+                            *child2Data.status = USE_AND_DONT_DELETE;
                             pq.push(child2Data);
+                        }
                         else
                         {
                             top = pq.top();
                             if( (top.end-top.start)/8< (child2Data.end-child2Data.start))
+                            {
+                                *child2Data.status = USE_AND_DONT_DELETE;
                                 pq.push(child2Data);
+                            }
                         }
                     }
                 }
@@ -521,8 +539,8 @@ finishUp:
                 uint32_t numPerThread = (end-start-1)/omp_get_num_threads();
                 uint32_t s = start + threadNo*numPerThread;
                 uint32_t e = (threadNo==omp_get_num_threads()-1)?end:(start + (threadNo+1)*numPerThread);
-                for (uint32_t i = s; i < e; ++i)
-                    AddCentroid(buildData, i, subCentroidBounds[threadNo]);
+
+                AddCentroid(buildData, s, e, subCentroidBounds[threadNo]);
 
 #pragma omp barrier
                 AddTimeSincePreviousTick(t2);
@@ -548,7 +566,6 @@ finishUp:
                         ((val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
                     if (b == nBuckets) b = nBuckets-1;
                     assert(b >= 0 && b < nBuckets);
-
                     {
                         subBuckets[threadNo][b].count++;
                         AddBox(buildData, i, subBuckets[threadNo][b].bounds);
@@ -557,26 +574,17 @@ finishUp:
 
                 AddTimeSincePreviousTick(t4);
 
-                for (uint32_t i = s; i < e; ++i)
-                    AddBox(buildData, i, subBbox[threadNo]);
-
-                if(!done1){
-#pragma omp critical
-                    {
-                        if(!done1)for(int i=0;i<maxNumThreads;i++)for(int b=0;b<nBuckets;b++)
-                        {
-                            buckets[b].count +=  subBuckets[i][b].count;
-                            buckets[b].bounds.AddBox(subBuckets[i][b].bounds);
-                        }
-                    }}
-
-                if(!done2){
-#pragma omp critical
-                    {
-                        if(!done2)
-                            for(int i=0;i<maxNumThreads;i++)
-                                bbox.AddBox(subBbox[i]);
-                    }}
+                AddBox(buildData, s, e, subBbox[threadNo]);
+                
+#pragma omp barrier
+                if(threadNo==0)for(int i=0;i<maxNumThreads;i++)for(int b=0;b<nBuckets;b++) //can parallelize this. But is it worth the effort?
+                {
+                    buckets[b].count +=  subBuckets[i][b].count;
+                    buckets[b].bounds.AddBox(subBuckets[i][b].bounds);
+                }
+                if(threadNo==0) for(int i=0;i<maxNumThreads;i++)
+                   bbox.AddBox(subBbox[i]);
+            
 
                 AddTimeSincePreviousTick(t5);
 
@@ -632,10 +640,10 @@ finishUp:
 
             queueData child1Data = {start, mid, node, true, NULL};
             queueData child2Data = {mid,   end, node, false, NULL};
-            child1Data.isValid = new bool;
-            *child1Data.isValid = true;
-            child2Data.isValid = new bool;
-            *child2Data.isValid = true;
+            child1Data.status = new char;
+            *child1Data.status = USE_AND_DELETE;
+            child2Data.status = new char;
+            *child2Data.status = USE_AND_DELETE;
 
             if(child1Data<child2Data)
                 swap(child1Data, child2Data);
