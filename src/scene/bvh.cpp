@@ -469,6 +469,7 @@ namespace _462 {
 	    }
 
 	    node->splitAxis = dim;
+	    node->bounds = bbox;
 
 	    child1Data.start = start;
 	    child1Data.end = mid;

@@ -23,7 +23,11 @@ namespace _462 {
     {
         // BVHBuildNode Public Methods
         BVHBuildNode(BVHBuildNode *p, bool firstChild):parent(p),isFirstChild(firstChild)
-        {children[0] = children[1] = NULL; childComplete[0]=childComplete[1]=false; nPrimitives = 0;}
+        {
+	    children[0] = children[1] = NULL; 
+	    childComplete[0]=childComplete[1]=false; 
+	    nPrimitives = 0;
+	}
         
         void InitLeaf(uint32_t first, uint32_t n, const BoundingBox &b) {
             firstPrimOffset = first;
