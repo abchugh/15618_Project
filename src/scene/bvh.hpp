@@ -4,6 +4,7 @@
 #include "math/vector.hpp"
 #include "partition_ispc.h"
 
+#include <cstdlib>
 #include <vector>
 #include <deque>
 #include <queue>
@@ -11,18 +12,18 @@
 #include "scene/BoundingBox.hpp"
 namespace _462 {
     
-    
+    #undef ISPC
     #define NUM_IN_PRE_QUEUE 7
     #define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
-
+    
     class Geometry;
     struct hitRecord;
     struct BVHBuildNode
     {
         // BVHBuildNode Public Methods
         BVHBuildNode(BVHBuildNode *p, bool firstChild):parent(p),isFirstChild(firstChild)
-        {children[0] = children[1] = NULL; childComplete[0]=childComplete[1]=false;}
+        {children[0] = children[1] = NULL; childComplete[0]=childComplete[1]=false; nPrimitives = 0;}
         
         void InitLeaf(uint32_t first, uint32_t n, const BoundingBox &b) {
             firstPrimOffset = first;
@@ -81,7 +82,71 @@ namespace _462 {
         uint8_t pad[2];       // ensure 32 byte total size
     };
 
+    struct JobQueueList {
+        int size;
+        std::deque<queueData> q[MAX_THREADS];
+        int lock[MAX_THREADS];
+        
+	JobQueueList() {
+	    std::fill(lock, lock + MAX_THREADS, 0);
+	}
 
+	inline void lockQueue(int index) {
+	    while (__sync_lock_test_and_set(&lock[index], 1)) ;
+	}
+
+	inline void releaseQueue(int index) {
+	    __sync_lock_release(&lock[index]);
+	}
+
+	void addJob(queueData data, int index) {
+	    lockQueue(index);
+	    q[index].push_front(data);
+	    releaseQueue(index);
+	}
+
+	queueData fetchJob(int index) {
+	    queueData job;
+	    job.start = 1;
+	    job.end = 0;
+
+	    lockQueue(index);
+	    if (q[index].size() > 0) {
+		job = q[index].front();
+		q[index].pop_front();
+	    }
+
+	    releaseQueue(index);
+
+	    return job;
+	}
+
+	int getJobNumber() {
+	    int jobNum = 0;
+	    for (int i = 0; i < size; i++)
+		jobNum += q[i].size();
+	    return jobNum;
+	}
+
+	queueData tryStealJob() {
+	    queueData job;
+	    job.start = 1;
+	    job.end = 0;
+
+	    int coin = rand() % size;
+
+	    if (q[coin].size() > 0) {
+		lockQueue(coin);
+		if (q[coin].size() > 0) {
+		    job = q[coin].back();
+		    q[coin].pop_back();
+		}
+		releaseQueue(coin);
+	    }
+		
+	    return job;
+	}
+    };
 #ifdef ISPC
     typedef ispc::BVHPrimitiveInfoList PrimitiveInfoList;
 #else
@@ -97,6 +162,8 @@ namespace _462 {
 
         //bvhNode();
         ~BVHAccel();
+
+	void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
@@ -113,9 +180,9 @@ namespace _462 {
         std::vector<Geometry*> primitives;
         LinearBVHNode *nodes;
         BVHBuildNode *root;
-        std::deque<queueData> q[MAX_THREADS];
+	JobQueueList jobQueueList;
         std::priority_queue<queueData> pq;
-
+        std::deque<queueData> q[MAX_THREADS];
 
     };
 

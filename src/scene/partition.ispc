@@ -43,8 +43,10 @@ export uniform int partition_ispc(uniform int start, uniform int end, uniform in
         compareDim = buildData[0].centroidz;
     compareDim = compareDim + start;
 
-    foreach (i = 0 ... nPrimitives) {
-        int smaller = compareDim[i]< mid;
+    for (uniform int i = 0; i < nPrimitives; i += programCount) {
+        int index = i + programIndex;
+        float coord = compareDim[index];
+        int smaller = coord< mid;
         int larger = 1 - smaller;
 
         int gang_smaller_offset = exclusive_scan_add(smaller);
@@ -60,7 +62,7 @@ export uniform int partition_ispc(uniform int start, uniform int end, uniform in
         else
 	        des = end - 1 - larger_offset - gang_larger_offset;
 
-        copyFromLocation(result, des, buildData, start+i);
+        copyFromLocation(result, des, buildData, start+index);
         //result[des] = buildData[start + i];
 	
         //print("des: %d\n", des);
