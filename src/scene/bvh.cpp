@@ -35,6 +35,11 @@ namespace _462 {
             sum+=arr[i];
         return sum;
     }
+	static void reset()
+	{
+		for(int i=0;i<MAX_THREADS;i++)
+			t1[i] = t2[i] = t3[i] = t4[i] = t5[i] = t6[i] = t7[i] = t8[i] = tP[i] = 0;
+	}
 #else
 #define AddTimeSincePreviousTick(interval)
 #define GetTime(timeNew)
@@ -126,7 +131,8 @@ namespace _462 {
         printf("Started parallel tree phase  at %ld \n", endTime-startTime);
         time_t busy[MAX_THREADS] = {0}, idle[MAX_THREADS] = {0}, idleX[MAX_THREADS] = {0};
 #ifdef ENABLED_TIME_LOGS
-        printf("Phases %lld %lld %lld %lld %lld %lld %lld %lld %lld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
+        printf("Phases %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
+	reset();	
 #endif
 //exit(0);        
         printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
@@ -213,14 +219,14 @@ namespace _462 {
 
         printf("Ended parallel tree phase at %ld \n", endTime-startTime);
 #ifdef ENABLED_TIME_LOGS
-        printf("Phases %lld %lld %lld %lld %lld %lld %lld %lld %lld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
+        printf("Phases %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
 #endif
         for(int i=0;i<MAX_THREADS;i++) if(busy[i]!=0)
             printf("%ld ", busy[i]);
         printf("\n");
         for(int i=0;i<MAX_THREADS;i++) if(busy[i]!=0)
             printf("%ld/%ld ", idle[i], idleX[i]);
-        printf("\n");
+        printf("%d\n",totalNodes);
 
         // Compute representation of depth-first traversal of BVH tree
         nodes = new LinearBVHNode[totalNodes];
@@ -532,7 +538,7 @@ finishUp:
             BucketInfo **subBuckets = new BucketInfo*[maxNumThreads];
             for(int i=0;i<maxNumThreads;i++)
                 subBuckets[i] = new BucketInfo[nBuckets];
-            bool done1 = false, done2 = false;
+
             int dim=0;
             float cost[nBuckets-1];    
 #pragma omp parallel

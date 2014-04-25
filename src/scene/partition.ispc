@@ -17,21 +17,6 @@ struct BVHPrimitiveInfoList {
     int primCount;
 };
 
-static inline int copyFromLocation(uniform BVHPrimitiveInfoList& result, int des, uniform const BVHPrimitiveInfoList& buildData, int src) {
-    result.primitiveNumber[des] = buildData.primitiveNumber[src];
-          
-    result.centroidx[des] = buildData.centroidx[src];
-    result.centroidy[des] = buildData.centroidy[src];
-    result.centroidz[des] = buildData.centroidz[src];
-                                    
-    result.lowCoordx[des] = buildData.lowCoordx[src];
-    result.lowCoordy[des] = buildData.lowCoordy[src];
-    result.lowCoordz[des] = buildData.lowCoordz[src];
-          
-    result.highCoordx[des] = buildData.highCoordx[src];
-    result.highCoordy[des] = buildData.highCoordy[src];
-    result.highCoordz[des] = buildData.highCoordz[src];
-}
 
 export void AddCentroid(uniform Vector3& lowCoord, uniform Vector3& highCoord, uniform const BVHPrimitiveInfoList& buildData,uniform int start, uniform int end) {
         Vector3 localLow=lowCoord,localHigh=highCoord;
@@ -75,6 +60,23 @@ export void AddBox(uniform Vector3& lowCoord, uniform Vector3& highCoord, unifor
         highCoord[2] = reduce_max(localHigh[2]);
 
 }
+
+
+/*static inline int copyFromLocation(uniform BVHPrimitiveInfoList& result, int des, uniform const BVHPrimitiveInfoList& buildData, int src) {
+    result.primitiveNumber[des] = buildData.primitiveNumber[src];
+          
+    result.centroidx[des] = buildData.centroidx[src];
+    result.centroidy[des] = buildData.centroidy[src];
+    result.centroidz[des] = buildData.centroidz[src];
+                                    
+    result.lowCoordx[des] = buildData.lowCoordx[src];
+    result.lowCoordy[des] = buildData.lowCoordy[src];
+    result.lowCoordz[des] = buildData.lowCoordz[src];
+          
+    result.highCoordx[des] = buildData.highCoordx[src];
+    result.highCoordy[des] = buildData.highCoordy[src];
+    result.highCoordz[des] = buildData.highCoordz[src];
+}
 export uniform int partition_ispc(uniform int start, uniform int end, uniform int dim, uniform float mid,
 		       uniform const BVHPrimitiveInfoList& buildData, uniform BVHPrimitiveInfoList& result) {
                 
@@ -116,4 +118,4 @@ export uniform int partition_ispc(uniform int start, uniform int end, uniform in
     }
     
     return smaller_offset + start;
-}
+}*/

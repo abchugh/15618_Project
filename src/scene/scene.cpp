@@ -172,7 +172,7 @@ Color3 Scene::calculateDiffuseColor(Vector3 p,Vector3 n,Color3 kd) const
 		for(int s = 0; s<sim; s++)
 		{
 			real_t x = random_gaussian(), y = random_gaussian(), z = random_gaussian();
-			Vector3 loc = point_lights[l].position;// + normalize(Vector3(x,y,z)) * point_lights[l].radius;
+			Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
 			
 			Vector3 L = normalize(loc-p);
 			real_t NDotL = dot(n,L);
