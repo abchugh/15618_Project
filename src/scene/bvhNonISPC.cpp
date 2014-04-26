@@ -46,10 +46,17 @@ namespace _462 {
     
     void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly)
     {
-        list.reserve(primitives.size());
-        if(!allocateOnly)for (uint32_t i = 0; i < primitives.size(); ++i) {
+        list.resize(primitives.size());
+        if(!allocateOnly)
+	    /*
+	    for (uint32_t i = 0; i < primitives.size(); ++i) {
 			list.push_back(PrimitiveInfo(i, primitives[i]->bb));
-		}
+			}*/
+	    #pragma omp parallel for
+	    for (uint32_t i = 0; i < primitives.size(); ++i) {
+		list[i] = PrimitiveInfo(i, primitives[i]->bb);
+	    }
+		
     }
     void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
     {

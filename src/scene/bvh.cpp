@@ -1,6 +1,8 @@
 #include "bvh.hpp"
 
 #include "scene/scene.hpp"
+
+#include "parallel/partition.h"
 #include <SDL_timer.h>
 #include <queue>
 #include <omp.h>
@@ -8,9 +10,46 @@
 #include <map>
 
 using namespace std;
+
+namespace std {
+    // overload swap
+    /*
+    template<>
+    void swap(_462::BVHPrimitiveInfo& a, _462::BVHPrimitiveInfo& b) {
+	ispc::swap_ispc((int8_t*)&a, (int8_t*)&b, sizeof(_462::BVHPrimitiveInfo), 1);
+    }
+
+    template<>
+     _462::BVHPrimitiveInfo* swap_ranges(_462::BVHPrimitiveInfo *a_begin, _462::BVHPrimitiveInfo *a_end,
+		     _462::BVHPrimitiveInfo *b_begin) {
+	int length = a_end - a_begin;
+
+	ispc::swap_ispc((int8_t*)a_begin, (int8_t*)b_begin, sizeof(_462::BVHPrimitiveInfo), length);
+	return b_begin;
+    }
+    */
+}
+
 namespace _462 {
     
 #define THRESHOLD 5
+
+    struct CompareToValLess {
+        CompareToValLess(int d, float v) { dim = d; val = v; }
+        int dim;
+        float val;
+        bool operator()(const PrimitiveInfo &a) const {
+            return a.centroid[dim] < val;
+        }
+    };
+    struct CompareToValLarger {
+        CompareToValLarger(int d, float v) { dim = d; val = v; }
+        int dim;
+        float val;
+        bool operator()(const PrimitiveInfo &a) const {
+            return a.centroid[dim] > val;
+        }
+    };
 
     PrimitiveInfoList buildDataBuffer;
 
@@ -58,6 +97,36 @@ namespace _462 {
     void clearList(PrimitiveInfoList& buildData);
     unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer);
     
+    int get_assign(int *assign, int limit) {
+	int result;
+	do {
+	    result = *assign;
+	    if (result >= limit - 1) {
+		return -1;
+	    }
+	} while (!__sync_bool_compare_and_swap(assign, result, result + 1));
+
+	return result;
+    }
+
+    int get_swap_spot(int *swap, int limit) {
+	int result = limit - 1;
+	for (int i = limit - 1; i >= 0; i--) {
+	    int des;
+	    int size = swap[i];
+	    if (size > 0) {
+		do {
+		    result = i;
+		    size = swap[i];
+		    if (size <= 0) {
+			continue;
+		    }
+		} while (!__sync_bool_compare_and_swap(swap + i, size, -1));
+	    }
+	}
+	return result;
+    }
+
     BVHAccel::BVHAccel(const vector<Geometry*>& geometries, uint32_t mp, const string &sm):nodes(NULL), root(NULL)
     {
         time_t startTime = SDL_GetTicks();
@@ -65,10 +134,6 @@ namespace _462 {
         printf("Building BVH...\n");
         maxPrimsInNode = min(255u, mp);
         primitives = geometries;
-
-        if (sm == "middle") splitMethod = SPLIT_MIDDLE;
-        else if (sm == "equal")  splitMethod = SPLIT_EQUAL_COUNTS;
-        else/*if (sm == "sah")*/         splitMethod = SPLIT_SAH;
 
         if (primitives.size() == 0)
             return;
@@ -79,6 +144,90 @@ namespace _462 {
 #ifdef ISPC
         initPrimitiveInfoList(primitives, buildDataBuffer, true);
 #endif
+	time_t endTime;
+	/*
+	//////////
+	startTime = SDL_GetTicks();
+	int dim = 0;
+	for (int i = 0; i < 20; i++) {
+	    dim = i % 3;
+	    float testVal = buildData[0].centroid[dim] - buildData[primitives.size() - 1].centroid[dim];
+	    testVal /= 2.f;
+	    testVal += buildData[0].centroid[dim];
+	    CompareToValLess compare(dim, testVal);
+	    printf("mid: %f\n", testVal);
+	    BVHPrimitiveInfo *midPtr  = std::partition(&buildData[0], 
+						       &buildData[primitives.size()],
+						       compare);
+	}
+        time_t endTime = SDL_GetTicks();
+
+	printf("Seq partition: %ld\n\n", endTime - startTime);
+
+        initPrimitiveInfoList(primitives, buildData);
+
+	
+	// Swap test
+	startTime = SDL_GetTicks();
+	for (int i = 0; i < 100; i++)
+	    std::swap_ranges((&buildData[0]), (&buildData[500000]), (&buildData[500000]));
+	endTime = SDL_GetTicks();
+	printf("time: %ld\n\n", endTime - startTime);	
+	// print
+	for (int i = 0; i < primitives.size(); i++) {
+	    printf("%d: %f\n", i, buildData[i].centroid[dim]);
+	}
+	
+	printf("=============\n");
+	startTime = SDL_GetTicks();
+	for (int i = 0; i < 100; i++)
+	    ispc::swap_ispc((int8_t*)(&buildData[0]), (int8_t*)(&buildData[500000]), sizeof(BVHPrimitiveInfo), 500000);
+	endTime = SDL_GetTicks();
+	//print
+	for (int i = 0; i < primitives.size(); i++) {
+	    printf("%d: %f\n", i, buildData[i].centroid[dim]);
+	}
+	
+	printf("time: %ld\n", endTime - startTime);	
+	exit(0);
+	
+	// parallel
+	startTime = SDL_GetTicks();
+	//int par_size = primitives.size();
+	for (int times = 0; times < 20; times++) {
+	    dim = times % 3;
+	    float testVal = buildData[0].centroid[dim] - buildData[primitives.size() - 1].centroid[dim];
+	    testVal /= 2.f;
+	    testVal += buildData[0].centroid[dim];
+	    CompareToValLess compare(dim, testVal);
+
+	    printf("mid: %f\n", testVal);
+	    
+	    for (int i = 0; i < primitives.size(); i++) {
+		//printf("%d: %f\n", i, buildData[i].centroid[dim]);
+	    }
+	    
+	    //printf("=============\n");
+	    //CompareToValLess compareless(dim, testVal);
+	    //CompareToValLarger comparelarger(dim, testVal);
+	    //BVHPrimitiveInfo *midPtr;
+	    
+	    __gnu_parallel::__parallel_partition(&buildData[0], 
+						 &buildData[primitives.size()],
+						 compare, 2);
+	    
+	}
+	endTime = SDL_GetTicks();
+	printf("OpenMP partition: %ld\n", endTime - startTime);
+
+	for (int i = 0; i < primitives.size(); i++) {
+	    //printf("%d: %f\n", i, buildData[i].centroid[dim]);
+	}
+	printf("\n");
+
+	exit(0);
+	//////////
+	*/
 
 	jobQueueList.size = omp_get_max_threads();
         uint32_t totalNodes = 0;
@@ -89,21 +238,26 @@ namespace _462 {
         pq.push(rootData);
         //q[0].push_back(rootData);
 
-        time_t endTime = SDL_GetTicks();
+        endTime = SDL_GetTicks();
         printf("Started parallel node phase at %ld \n", endTime-startTime);
+	startTime = SDL_GetTicks();
         while(pq.size() > 0)//omp_get_max_threads())
         {
             queueData data = pq.top();
             pq.pop();
-	    printf("fizz - %d\n", pq.size());
+	    //printf("fizz - %d\n", pq.size());
             BVHBuildNode *node = fastRecursiveBuild(buildData, data.start, data.end, &totalNodes, orderedPrims, 
 						    data.parent, data.isFirstChild);
-	    printf("here - %d\n", pq.size());
+	    //printf("here - %d\n", pq.size());
+	    
             if(data.parent == NULL)
                 root = node;
         }
 	printf("Switch...\n");
 	threadedSubtreeBuild(buildData, orderedPrims, &totalNodes);
+
+        endTime = SDL_GetTicks();
+	printf("Started parallel tree phase  at %ld \n", endTime-startTime);
 	/*
         int working = 0;
 
@@ -274,8 +428,8 @@ namespace _462 {
 			}
 		    } while (spin);
 		}
-		printf("#%d - start %d - %d\n", tid, data.start, data.end);
-		printf("#%d %d / %d\n", tid, working, jobQueueList.getJobNumber());
+		//printf("#%d - start %d - %d\n", tid, data.start, data.end);
+		//printf("#%d %d / %d\n", tid, working, jobQueueList.getJobNumber());
 		if (data.start < data.end) {
 		    int offset = 1 << tid;
 		    #pragma omp atomic
@@ -295,7 +449,7 @@ namespace _462 {
 		}
 		
 		if (working == 0 && (jobQueueList.getJobNumber() == 0)) {
-		    printf("#%d ends\n", tid);
+		    //printf("#%d ends\n", tid);
 		    break;
 		}
 	    }
@@ -314,18 +468,15 @@ namespace _462 {
 #else
             uint32_t primitiveNo = buildData[i].primitiveNumber;
 #endif
+	    /*
 	    if (primitiveNo > 12)
 		printf("^^%d: %d\n", start, primitiveNo);
-
+	    */
             orderedPrims[i] = primitives[ primitiveNo ];
         }
         node->InitLeaf(start, end-start, bbox);
-	    if (start == 2)
-		printf("here\n");
 
         AddTimeSincePreviousTick(tP);
-	    if (start == 2)
-		printf("here\n");
 
     }
 
@@ -358,12 +509,12 @@ namespace _462 {
 	AddTimeSincePreviousTick(t1);
 
 	if (nPrimitives == 1) {
-	if (start == 2)
-	    printf("$%d %d %d\n", start,end, omp_get_thread_num());
+	    //if (start == 2)
+	    //printf("$%d %d %d\n", start,end, omp_get_thread_num());
 
 	    buildLeaf(buildData,start,end, orderedPrims,node,bbox);
-	if (start == 2)
-	    printf("$%d %d %d\n", start,end, omp_get_thread_num());
+	    //if (start == 2)
+	    //printf("$%d %d %d\n", start,end, omp_get_thread_num());
 
 	}
 	else {
@@ -491,7 +642,7 @@ namespace _462 {
     BVHBuildNode *BVHAccel::fastRecursiveBuild( PrimitiveInfoList &buildData, uint32_t start,
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
 	assert(end-start > THRESHOLD);
-	printf("%d %d %d %ld\n", start,end, omp_get_thread_num(), parent);
+	//printf("%d %d %d %ld\n", start,end, omp_get_thread_num(), parent);
 
 	assert(start != end);
 	GetTime(startTime);
@@ -557,7 +708,9 @@ namespace _462 {
 
 		int b = nBuckets *
 		    ((val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
-		if (b == nBuckets) b = nBuckets-1;
+		// TODO: change
+		if (b >= nBuckets) b = nBuckets-1;
+		if (b < 0) b = 0;
 		assert(b >= 0 && b < nBuckets);
 		subBuckets[threadNo][b].count++;
 		AddBox(buildData, i, subBuckets[threadNo][b].bounds);
@@ -625,13 +778,13 @@ namespace _462 {
 	    float bmid = (minCostSplit+1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
 	    mid = partition(start, end, dim, bmid, buildData, buildDataBuffer);
 	}
-
+	/*
 	if (start == mid || mid == end) {
 	    printf("$$$ %d: %d - %d - %d\n", minCostSplit, start, mid, end);
 	    mid = (start == mid) ? mid + 1 : mid;
 	    mid = (end == mid) ? mid - 1 : mid;
 	}
-
+	*/
 	AddTimeSincePreviousTick(t7);
 
 	node->splitAxis = dim;
@@ -656,7 +809,7 @@ namespace _462 {
 	    jobQueueList.addJob(child2Data, coin);
 	}
 
-	printf("%d %d %d - %ld\n", start, mid, end, node);
+	//printf("%d %d %d - %ld\n", start, mid, end, node);
 	AddTimeSincePreviousTick(t8);
 	return node;
     }
