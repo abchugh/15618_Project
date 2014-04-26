@@ -30,6 +30,42 @@ static inline int copyFromLocation(BVHPrimitiveInfoList* result, int des, const 
     result->highCoordz[des] = buildData->highCoordz[src];
 }
 
+export void swap_ispc(uniform int8 a[], uniform int8 b[], uniform int type_size, uniform int size) {
+    
+    int32 temp_4bytes;
+    int8 temp_byte;
+    uniform int four_steps = size * type_size / 4;
+
+    foreach (i = 0 ... four_steps) {
+	temp_4bytes = *((int32*)(a) + i);
+	*((int32*)(a) + i) = *((int32*)(b) + i);
+	*((int32*)(b) + i) = temp_4bytes;
+    }
+    
+    foreach (i = four_steps * 4 ... size * type_size) {
+	temp_byte = a[i];
+	a[i] = b[i];
+	b[i] = temp_byte;
+    }
+    /*
+    int64 temp_8bytes;
+    int8 temp_byte;
+    uniform int eight_steps = size * type_size / 8;
+
+    foreach (i = 0 ... eight_steps) {
+	temp_8bytes = *((int64*)(a) + i);
+	*((int64*)(a) + i) = *((int64*)(b) + i);
+	*((int64*)(b) + i) = temp_8bytes;
+    }
+    
+    foreach (i = eight_steps * 8 ... size * type_size) {
+	temp_byte = a[i];
+	a[i] = b[i];
+	b[i] = temp_byte;
+    }
+    */
+}
+
 export uniform int partition_ispc(uniform int start, uniform int end, uniform int dim, uniform float mid,
 		       uniform BVHPrimitiveInfoList buildData[], uniform BVHPrimitiveInfoList result[]) {
                 
