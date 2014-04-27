@@ -1,6 +1,8 @@
 #include "bvh.hpp"
 #ifndef ISPC
 
+#include <iterator>
+#include "parallel/partition.h"
 #include "scene/scene.hpp"
 
 using namespace std;
@@ -40,8 +42,21 @@ namespace _462 {
         return b <= splitBucket;
     }
     unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer) {
-       PrimitiveInfo* pMid = std::partition(&buildData[start], &buildData[end-1]+1, CompareToVal(dim, mid));
-       return pMid - &buildData[0];
+	//PrimitiveInfo* pMid = std::partition(&buildData[start], &buildData[end-1]+1, CompareToVal(dim, mid));
+	int result;
+	int num_threads = omp_get_max_threads();
+	if (end - start > 2000) {
+	    std::iterator_traits<PrimitiveInfo*>::difference_type pMid = 
+		__gnu_parallel::__parallel_partition(&buildData[start],
+						     &buildData[end], CompareToVal(dim, mid), 8);
+	    result = pMid + start;
+	}
+	else {
+	    PrimitiveInfo* pMid = std::partition(&buildData[start], &buildData[end-1]+1, CompareToVal(dim, mid));
+	    result = pMid - &buildData[0];
+	}
+
+	return result;
     }
     
     void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly)
@@ -58,13 +73,19 @@ namespace _462 {
 	    }
 		
     }
-    void AddBox(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t index, BoundingBox & box)
     {
         box.AddBox(buildData[index].bounds);
     }
-    void AddCentroid(const PrimitiveInfoList& buildData, int index, BoundingBox & box)
+    void AddBox(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box)
     {
-        box.AddPoint(buildData[index].centroid);
+        for(uint32_t i=start; i<end; i++)
+            box.AddBox(buildData[i].bounds);
+    }
+    void AddCentroid(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box)
+    {
+        for(uint32_t i=start; i<end; i++)
+            box.AddPoint(buildData[i].centroid);
     }
     uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim)
     {

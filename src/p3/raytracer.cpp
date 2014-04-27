@@ -139,7 +139,7 @@ bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
 	
     // TODO Add any modifications to this algorithm, if needed.
 	
-    static const size_t PRINT_INTERVAL = 64;
+    //static const size_t PRINT_INTERVAL = 64;
 
     // the time in milliseconds that we should stop
     unsigned int end_time = 0;
@@ -186,7 +186,7 @@ bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time)
         }
     }
 	time_t endTime = SDL_GetTicks();
-    if (is_done) printf("Done raytracing! %d\n", endTime-startTime);
+    if (is_done) printf("Done raytracing! %ld\n", endTime-startTime);
 
     return is_done;
 }

@@ -12,9 +12,9 @@
 #include "scene/BoundingBox.hpp"
 namespace _462 {
     
-    #undef ISPC
+    //#undef ISPC
     #define NUM_IN_PRE_QUEUE 7
-    #define ENABLED_TIME_LOGS
+    //#define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
     
     class Geometry;
@@ -51,16 +51,22 @@ namespace _462 {
         uint32_t splitAxis, firstPrimOffset, nPrimitives;
     };
     
+    const int DONT_USE_AND_DELETE = 0;
+    const int USE_AND_DONT_DELETE = 1;
+    const int USE_AND_DELETE = 2;
+
     struct queueData
     {
         uint32_t start, end;
         BVHBuildNode* parent;
         bool isFirstChild;
-        bool* isValid;
+        
+        char* status;//when in both q and pq-> 1-use and dont delete, 0 don't use and delete,   when only in one of q and pq-> 2-use and delete
         bool operator<(const queueData& el)const
         {
             return end-start<el.end-el.start;
         }
+        static bool updateStatus(queueData&);
     };
 
     // BVHAccel Local Declarations

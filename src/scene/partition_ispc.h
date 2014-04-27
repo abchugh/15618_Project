@@ -14,6 +14,16 @@
 #ifdef __cplusplus
 namespace ispc { /* namespace */
 #endif // __cplusplus
+///////////////////////////////////////////////////////////////////////////
+// Vector types with external visibility from ispc code
+///////////////////////////////////////////////////////////////////////////
+
+#ifdef _MSC_VER
+__declspec( align(16) ) struct float3 { float v[3]; };
+#else
+struct float3 { float v[3]; } __attribute__ ((aligned(16)));
+#endif
+
 struct BVHPrimitiveInfoList {
     uint32_t * primitiveNumber;
     float * centroidx;
@@ -35,7 +45,8 @@ struct BVHPrimitiveInfoList {
 #if defined(__cplusplus) && !defined(__ISPC_NO_EXTERN_C)
 extern "C" {
 #endif // __cplusplus
-    extern int32_t partition_ispc(int32_t start, int32_t end, int32_t dim, float mid, struct BVHPrimitiveInfoList * buildData, struct BVHPrimitiveInfoList * result);
+    extern void AddBox(float3   &lowCoord, float3   &highCoord, const struct BVHPrimitiveInfoList &buildData, int32_t start, int32_t end);
+    extern void AddCentroid(float3   &lowCoord, float3   &highCoord, const struct BVHPrimitiveInfoList &buildData, int32_t start, int32_t end);
     extern void swap_ispc(int8_t * a, int8_t * b, int32_t type_size, int32_t size);
 #if defined(__cplusplus) && !defined(__ISPC_NO_EXTERN_C)
 } /* end extern C */
