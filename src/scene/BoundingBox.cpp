@@ -16,7 +16,8 @@ void BoundingBox::AddPoint(Vector3 point)
             highCoord[i] = point[i];
     }
 }
-#ifdef ISPC
+
+#ifdef ISPC_SOA
 void BoundingBox::AddCentroid(const ispc::BVHPrimitiveInfoList& list, int index)
 {
     if(this->lowCoord.x > list.centroidx[index])

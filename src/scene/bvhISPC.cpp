@@ -1,5 +1,6 @@
 #include "bvh.hpp"
-#ifdef ISPC
+
+#ifdef ISPC_SOA
 
 #include <string.h>
 #include "scene/scene.hpp"

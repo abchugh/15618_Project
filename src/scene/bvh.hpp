@@ -3,6 +3,7 @@
 
 #include "math/vector.hpp"
 #include "partition_ispc.h"
+#include "ispc_switch.h"
 
 #include <cstdlib>
 #include <vector>
@@ -157,8 +158,11 @@ namespace _462 {
 	    return job;
 	}
     };
-#ifdef ISPC
+#ifdef ISPC_SOA
     typedef ispc::BVHPrimitiveInfoList PrimitiveInfoList;
+#elif defined(ISPC_AOS)
+    typedef ispc::BVHPrimitiveInfo PrimitiveInfo;
+    typedef std::vector<ispc::BVHPrimitiveInfo> PrimitiveInfoList;
 #else
     typedef _462::BVHPrimitiveInfo PrimitiveInfo;
     typedef std::vector<_462::BVHPrimitiveInfo> PrimitiveInfoList;

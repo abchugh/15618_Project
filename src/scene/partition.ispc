@@ -1,5 +1,10 @@
-typedef float<3> Vector3;
+#include "ispc_switch.h"
 
+typedef float<3> Vector3;
+typedef float<4> Vector4;
+typedef float<8> Vector8;
+
+#ifdef ISPC_SOA
 struct BVHPrimitiveInfoList {
     unsigned int* primitiveNumber;
     float* centroidx;
@@ -16,7 +21,6 @@ struct BVHPrimitiveInfoList {
     
     int primCount;
 };
-
 
 export void AddCentroid(uniform Vector3& lowCoord, uniform Vector3& highCoord, uniform const BVHPrimitiveInfoList& buildData,uniform int start, uniform int end) {
         Vector3 localLow=lowCoord,localHigh=highCoord;
@@ -39,6 +43,7 @@ export void AddCentroid(uniform Vector3& lowCoord, uniform Vector3& highCoord, u
         highCoord[2] = reduce_max(localHigh[2]);
 
 }
+
 export void AddBox(uniform Vector3& lowCoord, uniform Vector3& highCoord, uniform const BVHPrimitiveInfoList& buildData,uniform int start, uniform int end) {
         Vector3 localLow=lowCoord,localHigh=highCoord;
         foreach (i = start ... end){
@@ -61,6 +66,67 @@ export void AddBox(uniform Vector3& lowCoord, uniform Vector3& highCoord, unifor
 
 }
 
+#elif defined(ISPC_AOS)
+
+// Assume vector lanes are 8-width
+
+struct BVHPrimitiveInfo {
+    // use w of lowCoord to store primitiveNumber
+    Vector4 lowCoord;
+    Vector4 highCoord;
+    Vector4 centroid;
+    Vector4 negCentroid;
+};
+
+export void AddCentroid(uniform Vector3& lowCoord, uniform Vector3& highCoord,
+		   const uniform BVHPrimitiveInfo primitiveList[], uniform int start, uniform int end) {
+    assert(programCount == 8);
+
+    int coord = programIndex - 4;
+    float localCoord;
+    uniform float* uniform primitiveCoord;
+
+    if (programIndex < 3)
+	localCoord = lowCoord[programIndex];
+    else if (programIndex >= 4 && programIndex < 7)
+	localCoord = -highCoord[coord];
+
+    for (uniform int i = start; i < end; i++) {
+	primitiveCoord = (float*)&(primitiveList[i].centroid);
+	localCoord = min(localCoord, primitiveCoord[programIndex]);
+    }
+
+    if (programIndex < 3)
+	lowCoord[programIndex] = localCoord;
+    else if (programIndex >= 4 && programIndex < 7)
+	highCoord[coord] = -localCoord;
+}
+
+export void AddBox(uniform Vector3& lowCoord, uniform Vector3& highCoord, 
+		   const uniform BVHPrimitiveInfo primitiveList[], 
+		   uniform int start, uniform int end) {
+    // Assume lowCoord and highCoord have been initialized.
+    assert(programCount == 8);
+    
+    int coord = programIndex - 4;
+    float localCoord;
+    uniform float* uniform primitiveCoord;
+    
+    if (programIndex < 3)
+	localCoord = lowCoord[programIndex];
+    else if (programIndex >= 4 && programIndex < 7)
+	localCoord = -highCoord[coord];
+    
+    for (uniform int i = start; i < end; i++) {
+	primitiveCoord = (float*)&(primitiveList[i].lowCoord);
+	localCoord = min(localCoord, primitiveCoord[programIndex]);
+    }
+    
+    if (programIndex < 3)
+	lowCoord[programIndex] = localCoord;
+    else if (programIndex >= 4 && programIndex < 7)
+	highCoord[coord] = -localCoord;
+}
 
 export void swap_ispc(uniform int8 a[], uniform int8 b[], uniform int type_size, uniform int size) {
     
@@ -97,7 +163,7 @@ export void swap_ispc(uniform int8 a[], uniform int8 b[], uniform int type_size,
     }
     */
 }
-
+#endif
 
 /*static inline int copyFromLocation(uniform BVHPrimitiveInfoList& result, int des, uniform const BVHPrimitiveInfoList& buildData, int src) {
     result.primitiveNumber[des] = buildData.primitiveNumber[src];

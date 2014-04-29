@@ -1,5 +1,6 @@
 #include "bvh.hpp"
 
+#include "math/vector.hpp"
 #include "scene/scene.hpp"
 #include <SDL_timer.h>
 #include <queue>
@@ -9,33 +10,18 @@
 
 using namespace std;
 
-namespace std {
-    // overload swap
-    /*
-    template<>
-    void swap(_462::BVHPrimitiveInfo& a, _462::BVHPrimitiveInfo& b) {
-	ispc::swap_ispc((int8_t*)&a, (int8_t*)&b, sizeof(_462::BVHPrimitiveInfo), 1);
-    }
-
-    template<>
-     _462::BVHPrimitiveInfo* swap_ranges(_462::BVHPrimitiveInfo *a_begin, _462::BVHPrimitiveInfo *a_end,
-		     _462::BVHPrimitiveInfo *b_begin) {
-	int length = a_end - a_begin;
-
-	ispc::swap_ispc((int8_t*)a_begin, (int8_t*)b_begin, sizeof(_462::BVHPrimitiveInfo), length);
-	return b_begin;
-    }
-    */
-}
-
 namespace _462 {
-#ifndef ISPC
+#ifndef ISPC_SOA
     struct CompareToVal {
         CompareToVal(int d, float v) { dim = d; val = v; }
         int dim;
         float val;
         bool operator()(const PrimitiveInfo &a) const {
-            return a.centroid[dim] < val;
+	    #ifdef ISPC_AOS
+            return a.centroid.v[dim] < val;
+	    #else
+	    return a.centroid[dim] < val;
+	    #endif
         }
     };
 #endif
@@ -121,11 +107,24 @@ namespace _462 {
         // Initialize _buildData_ array for primitives
         PrimitiveInfoList buildData;
         initPrimitiveInfoList(primitives, buildData);
-#ifdef ISPC
+#ifdef ISPC_SOA
         initPrimitiveInfoList(primitives, buildDataBuffer, true);
 #endif
+	/*
+	BoundingBox box;
 
-       
+	AddCentroid(buildData, 0, 2, box);
+	
+	for (int i = 0; i < 2; i++)
+	    //printf("#%f, %f, %f\n", -buildData[i].highCoord.v[0], -buildData[i].highCoord.v[1], -buildData[i].highCoord.v[2]);
+	    printf("#%f, %f, %f\n", buildData[i].centroid.v[0], buildData[i].centroid.v[1], buildData[i].centroid.v[2]);
+	
+	printf("%f, %f, %f\n", box.lowCoord[0], box.lowCoord[1], box.lowCoord[2]);
+	printf("%f, %f, %f\n", box.highCoord[0], box.highCoord[1], box.highCoord[2]);
+
+	exit(0);
+	*/
+	
         uint32_t totalNodes = 0;
         vector< Geometry* > orderedPrims(primitives.size());
 
@@ -159,9 +158,8 @@ namespace _462 {
         printf("Phases %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
 	reset();	
 #endif
-//exit(0);        
+
         printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
-        int blah = 0;
 #pragma omp parallel
         {
 
@@ -169,8 +167,6 @@ namespace _462 {
             int backoff = 2;
             while(1)
             {
-                blah++;
-
                 time_t idleStart = SDL_GetTicks();
                 queueData data;
                 bool foundWork = false;
@@ -217,9 +213,6 @@ namespace _462 {
 
                 time_t idleEnd = SDL_GetTicks();
 
-                /*if(blah%10==0 && blah<200)///if(working& (1<<tid))
-                printf("%d %lu %ld\n", working,pq.size(),SDL_GetTicks()-endTime );//data.start, data.end);//
-                */
                 idleX[tid] += idleEnd-idleStart;
                 if(!foundWork)
                     idle[tid] += idleEnd - idleStart;
@@ -290,10 +283,13 @@ namespace _462 {
         GetTime(primitiveStart);
         for (uint32_t i = start; i < end; ++i)
         {
-#ifdef ISPC
-            uint32_t primitiveNo = buildData.primitiveNumber[i];
+	    uint32_t primitiveNo;
+#ifdef ISPC_SOA
+            primitiveNo = buildData.primitiveNumber[i];
+#elif defined(ISPC_AOS)
+	    memcpy(&primitiveNo, &(buildData[i].lowCoord.v[3]), sizeof(uint32_t));
 #else
-            uint32_t primitiveNo = buildData[i].primitiveNumber;
+	    primitiveNo = buildData[i].primitiveNumber;
 #endif
             orderedPrims[i] = primitives[ primitiveNo ];
         }
@@ -303,10 +299,6 @@ namespace _462 {
     }
     BVHBuildNode *BVHAccel::recursiveBuild( PrimitiveInfoList &buildData, uint32_t start,
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
-
-            if (start == end)
-                printf("%d %d %d\n", start,end, omp_get_thread_num());
-
             assert(start != end);
             GetTime(startTime);
 
@@ -349,113 +341,89 @@ namespace _462 {
                     goto finishUp;
                 }
 
-                // Partition primitives based on _splitMethod_
-                switch (splitMethod) {
-                case SPLIT_MIDDLE: {
-                    // Partition primitives through node's midpoint
-                    double pmid = .5f * (centroidBounds.lowCoord[dim] + centroidBounds.highCoord[dim]);
-                    
-                    mid = partition(start, end, dim, pmid, buildData, buildDataBuffer);
+		// Partition primitives using approximate SAH
+		if (nPrimitives <= 4) {
+		    // Partition primitives into equally-sized subsets
+		    mid = SplitEqually(buildData, start, end, dim);
+		    AddTimeSincePreviousTick(t3);
 
-                    if (mid != start && mid != end)
-                        // for lots of prims with large overlapping bounding boxes, this
-                            // may fail to partition; in that case don't break and fall through
-                                // to SPLIT_EQUAL_COUNTS
-                                    break;
-                }
-                case SPLIT_EQUAL_COUNTS: {
-                    // Partition primitives into equally-sized subsets
-                    mid = SplitEqually(buildData, start, end, dim);
-                    break;
-                                         }
-                case SPLIT_SAH: default: {
-                    // Partition primitives using approximate SAH
-                    if (nPrimitives <= 4) {
-                        // Partition primitives into equally-sized subsets
-                        mid = SplitEqually(buildData, start, end, dim);
-                        AddTimeSincePreviousTick(t3);
+		}
+		else {
+		    // Allocate _BucketInfo_ for SAH partition buckets
+		    const int nBuckets = 12;
+		    struct BucketInfo {
+			BucketInfo() { count = 0; }
+			int count;
+			BoundingBox bounds;
+		    };
+		    BucketInfo buckets[nBuckets];
 
-                    }
-                    else {
-                        // Allocate _BucketInfo_ for SAH partition buckets
-                        const int nBuckets = 12;
-                        struct BucketInfo {
-                            BucketInfo() { count = 0; }
-                            int count;
-                            BoundingBox bounds;
-                        };
-                        BucketInfo buckets[nBuckets];
-
-                        // Initialize _BucketInfo_ for SAH partition buckets
-                        for (uint32_t j = 0; j < nPrimitives; ++j) {
-                            uint32_t i = j + start;
+		    // Initialize _BucketInfo_ for SAH partition buckets
+		    for (uint32_t j = 0; j < nPrimitives; ++j) {
+			uint32_t i = j + start;
                             
-                            float val = getCentroidDim(buildData, i, dim);
+			float val = getCentroidDim(buildData, i, dim);
 
-                            int b = nBuckets *
-                                ( (val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
-                            if (b == nBuckets) b = nBuckets-1;
+			int b = nBuckets *
+			    ( (val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
+			if (b == nBuckets) b = nBuckets-1;
 
-                            assert(b >= 0 && b < nBuckets);
-                            buckets[b].count++;
-                            AddBox(buildData, i, buckets[b].bounds);
+			assert(b >= 0 && b < nBuckets);
+			buckets[b].count++;
+			AddBox(buildData, i, buckets[b].bounds);
+		    }
+		    AddTimeSincePreviousTick(t4);
 
-                        }
-                        AddTimeSincePreviousTick(t4);
+		    // Compute costs for splitting after each bucket
+		    float cost[nBuckets-1];
+		    for (int i = 0; i < nBuckets-1; ++i) {
+			BoundingBox b0, b1;
+			int count0 = 0, count1 = 0;
+			for (int j = 0; j <= i; ++j) {
+			    b0.AddBox(buckets[j].bounds);
+			    count0 += buckets[j].count;
+			}
+			for (int j = i+1; j < nBuckets; ++j) {
+			    b1.AddBox(buckets[j].bounds);
+			    count1 += buckets[j].count;
+			}
+			cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
+			    bbox.SurfaceArea();
+			//printf("%f - %f - %f\n", b0.SurfaceArea(), b1.SurfaceArea(), bbox.SurfaceArea());
+		    }
+		    AddTimeSincePreviousTick(t5);
 
-                        // Compute costs for splitting after each bucket
-                        float cost[nBuckets-1];
-                        for (int i = 0; i < nBuckets-1; ++i) {
-                            BoundingBox b0, b1;
-                            int count0 = 0, count1 = 0;
-                            for (int j = 0; j <= i; ++j) {
-                                b0.AddBox(buckets[j].bounds);
-                                count0 += buckets[j].count;
-                            }
-                            for (int j = i+1; j < nBuckets; ++j) {
-                                b1.AddBox(buckets[j].bounds);
-                                count1 += buckets[j].count;
-                            }
-                            cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
-                                bbox.SurfaceArea();
-                        }
-                        AddTimeSincePreviousTick(t5);
+		    // Find bucket to split at that minimizes SAH metric
+		    float minCost = cost[0];
+		    uint32_t minCostSplit = 0;
+		    for (int i = 1; i < nBuckets-1; ++i) {
 
-                        // Find bucket to split at that minimizes SAH metric
-                        float minCost = cost[0];
-                        uint32_t minCostSplit = 0;
-                        for (int i = 1; i < nBuckets-1; ++i) {
+			if (cost[i] < minCost) {
+			    minCost = cost[i];
+			    minCostSplit = i;
+			}
+		    }
+		    AddTimeSincePreviousTick(t6);
 
-                            if (cost[i] < minCost) {
-                                minCost = cost[i];
-                                minCostSplit = i;
-                            }
-                        }
-                        AddTimeSincePreviousTick(t6);
-
-                        // Either create leaf or split primitives at selected SAH bucket
-                        if (nPrimitives > maxPrimsInNode || minCost < nPrimitives) {
+		    // Either create leaf or split primitives at selected SAH bucket
+		    if (nPrimitives > maxPrimsInNode || minCost < nPrimitives) {
                             
-                            float bmid = (minCostSplit + 1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
-                            mid = partition(start, end, dim, bmid, buildData, buildDataBuffer);
+			float bmid = (minCostSplit + 1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
+			mid = partition(start, end, dim, bmid, buildData, buildDataBuffer);
 
 
-                            /*if (start == mid || mid == end)
-                                printf("%d - %d - %d\n%d: l: %f; h: %f; m: %f\n", start, mid, end, minCostSplit,
-                                centroidBounds.lowCoord[dim], centroidBounds.highCoord[dim], bmid);*/
+			/*if (start == mid || mid == end)
+			  printf("%d - %d - %d\n%d: l: %f; h: %f; m: %f\n", start, mid, end, minCostSplit,
+			  centroidBounds.lowCoord[dim], centroidBounds.highCoord[dim], bmid);*/
 
-                            AddTimeSincePreviousTick(t7);
-                        }
+			AddTimeSincePreviousTick(t7);
+		    }
 
-                        else {
-                            buildLeaf(buildData,start,end, orderedPrims,node,bbox);
-                            goto finishUp;
-                        }
+		    else {
+			buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+			goto finishUp;
+		    }
 
-
-                    }
-                    break;
-                                }
                 }
                 node->splitAxis = dim;
 		node->bounds = bbox;
@@ -498,23 +466,7 @@ namespace _462 {
                 }
             }
 finishUp:
-	    /*
-            if(parent)
-            {
-                assert(!parent->childComplete[firstChild?0:1]);
-                parent->childComplete[firstChild?0:1] = true;
 
-                while(parent!=NULL)
-                {
-                    //not thread safe??
-                    if(parent->childComplete[0] == true && parent->childComplete[1] == true)
-                        parent->InitInterior(parent->children[0], parent->children[1]);
-                    else
-                        break;
-                    parent = parent->parent;
-                }
-            }
-	    */
             AddTimeSincePreviousTick(t8);
             if(numInternalBranches>=1)
             {
@@ -533,9 +485,7 @@ finishUp:
     BVHBuildNode *BVHAccel::fastRecursiveBuild( PrimitiveInfoList &buildData, uint32_t start,
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
             assert(end-start>100);
-            //printf("%d %d %d\n", start,end, omp_get_thread_num());
 
-            assert(start != end);
             GetTime(startTime);
 
             (*totalNodes)++;
@@ -647,8 +597,6 @@ finishUp:
                     bbox.SurfaceArea();
             }
 
-
-
             float minCost = cost[0];
             uint32_t minCostSplit = 0;
             for (int i = 1; i < nBuckets-1; ++i) {
@@ -658,7 +606,6 @@ finishUp:
                 }
             }
             AddTimeSincePreviousTick(t6);
-
 
             uint32_t mid = 0;
             // Either create leaf or split primitives at selected SAH bucket
@@ -691,24 +638,6 @@ finishUp:
                 orderedPrims, child2Data.parent, child2Data.isFirstChild);
             else
                 pq.push(child2Data);
-
-	    /*
-            if(parent)
-            {
-                assert(!parent->childComplete[firstChild?0:1]);
-                parent->childComplete[firstChild?0:1] = true;
-
-                while(parent!=NULL)
-                {
-                    //not thread safe??
-                    if(parent->childComplete[0] == true && parent->childComplete[1] == true)
-                        parent->InitInterior(parent->children[0], parent->children[1]);
-                    else
-                        break;
-                    parent = parent->parent;
-                }
-            }
-	    */
 
             AddTimeSincePreviousTick(t8);
             return node;
@@ -789,4 +718,3 @@ finishUp:
         return obj;
     }
 }/* _462 */
-

@@ -2,11 +2,8 @@
 #define _462_BOUNDING_BOX_HPP_
 #include "math/vector.hpp"
 
-#define ISPC
-
-#ifdef ISPC
 #include "partition_ispc.h"
-#endif
+#include "ispc_switch.h"
 
 namespace _462 {
 class Ray;
@@ -17,7 +14,7 @@ public:
 
     //Extend the bounding box to accomodate the point
     void AddPoint(Vector3 point);
-#ifdef ISPC
+#ifdef ISPC_SOA
     void AddCentroid(const ispc::BVHPrimitiveInfoList& list, int index);
     void AddBox(const ispc::BVHPrimitiveInfoList& list, int index);
 #endif
