@@ -20,6 +20,7 @@ namespace _462 {
     
     class Geometry;
     struct hitRecord;
+
     struct BVHBuildNode
     {
         // BVHBuildNode Public Methods

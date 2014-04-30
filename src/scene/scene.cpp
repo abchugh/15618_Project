@@ -144,11 +144,10 @@ void Scene::reset()
         delete *i;
     }
 
-	if(tree)
-	{
-		delete tree;
-		tree = NULL;
-	}
+    if(tree) {
+	delete tree;
+	tree = NULL;
+    }
     geometries.clear();
     materials.clear();
     meshes.clear();

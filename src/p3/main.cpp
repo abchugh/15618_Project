@@ -215,7 +215,7 @@ void RaytracerApplication::update( real_t delta_time )
         // do part of the raytrace
         if ( !raytrace_finished ) {
             assert( buffer );
-            raytrace_finished = raytracer.raytrace( buffer, &delta_time );
+            raytrace_finished = raytracer.raytrace( buffer, &delta_time, false );
         }
 		else
 		{
@@ -654,7 +654,7 @@ int main( int argc, char* argv[] )
         }
         assert( app.buffer );
         // raytrace until done
-        app.raytracer.raytrace( app.buffer, 0 );
+        app.raytracer.raytrace( app.buffer, 0, false );
         // output result
         app.output_image();
         return 0;

@@ -22,6 +22,8 @@ class Scene;
 class Ray;
 struct Intersection;
 struct Options;
+struct Packet;
+
 class Raytracer
 {
 public:
@@ -33,7 +35,7 @@ public:
     bool initialize(Scene* scene,int num_samples, int num_glossy_reflection_samples, 
 		size_t width, size_t height);
 
-    bool raytrace(unsigned char* buffer, real_t* max_time);
+    bool raytrace(unsigned char* buffer, real_t* max_time, bool packet_tracing);
 
 private:
 
@@ -42,6 +44,18 @@ private:
 		       size_t y,
 		       size_t width,
 		       size_t height);
+
+    Packet build_packet(int x, int y, size_t width, size_t height);
+
+    // when multiple packets inside one pixel
+    void trace_small_packet(unsigned char* buffer,
+			    size_t width,
+			    size_t height);
+
+    // when a packet is over multiple pixels
+    void trace_large_packet(unsigned char* buffer,
+			    size_t width,
+			    size_t height);
 
     // the scene to trace
     Scene* scene;
@@ -54,6 +68,13 @@ private:
 	
     unsigned int num_samples;
     unsigned int num_dof_samples;
+
+    // work size
+    size_t pixel_width;
+    // packet size (ray)
+    size_t packet_width_ray;
+    // packet size (pixel)
+    size_t packet_width_pixel;
 };
 
 } /* _462 */
