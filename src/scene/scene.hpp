@@ -29,26 +29,30 @@ namespace _462 {
 	real_t t;
 	//Properties of the matrial of the object that was hit - ambient, diffuse, specular & texColor with refractive index.
 	MaterialProp mp;
+
+    };
+
+    enum PlanePosition { FRONT, BACK, TOP, BOTTOM, LEFT, RIGHT };
+
+    struct Plane {
+	Vector3 norm;
+	Vector3 point;
+    };
+
+    struct Frustum {
+	Ray corners[4];
+	Plane planes[6];
     };
 
     struct Packet {
-	Ray corners[4];
+	Frustum frustum;
 	Ray *rays;
+	uint32_t size;
 	
 	Packet(size_t packet_size) {
 	    rays = new Ray[packet_size];
+	    size = packet_size;
 	}   
-
-	// 0 1
-	// 2 3
-	Packet(const Ray corner0, const Ray corner1, const Ray corner2, const Ray corner3,
-	       size_t packet_size) {
-	    corners[0] = corner0;
-	    corners[1] = corner1;
-	    corners[2] = corner2;
-	    corners[3] = corner3;
-	    rays = new Ray[packet_size];
-	}
 
 	~Packet() {
 	    delete[] rays;
@@ -157,7 +161,8 @@ namespace _462 {
 	void add_mesh( Mesh* m );
 	void add_light( const SphereLight& l );
 	static const int maxRecursionDepth;
-	Color3 getColor(const Ray& r, std::vector<real_t> refractiveStack,int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
+	Color3 getColor(const Ray& r, std::vector<real_t> refractiveStack, hitRecord& h, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
+	void getColors(const Packet& packet, std::vector<real_t> refractiveStack, Color3 *colors, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
 
 	bool hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
 	Color3 calculateDiffuseColor(Vector3 p, Vector3 n, Color3 kd)const;

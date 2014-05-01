@@ -110,20 +110,6 @@ namespace _462 {
 #ifdef ISPC_SOA
         initPrimitiveInfoList(primitives, buildDataBuffer, true);
 #endif
-	/*
-	BoundingBox box;
-
-	AddCentroid(buildData, 0, 2, box);
-	
-	for (int i = 0; i < 2; i++)
-	    //printf("#%f, %f, %f\n", -buildData[i].highCoord.v[0], -buildData[i].highCoord.v[1], -buildData[i].highCoord.v[2]);
-	    printf("#%f, %f, %f\n", buildData[i].centroid.v[0], buildData[i].centroid.v[1], buildData[i].centroid.v[2]);
-	
-	printf("%f, %f, %f\n", box.lowCoord[0], box.lowCoord[1], box.lowCoord[2]);
-	printf("%f, %f, %f\n", box.highCoord[0], box.highCoord[1], box.highCoord[2]);
-
-	exit(0);
-	*/
 	
         uint32_t totalNodes = 0;
         vector< Geometry* > orderedPrims(primitives.size());
@@ -661,6 +647,100 @@ finishUp:
             linearNode->secondChildOffset = flattenBVHTree(node->children[1], offset);
         }
         return myOffset;
+    }
+
+    uint32_t BVHAccel::getFirstHit(const Packet packet, const BoundingBox box, uint32_t active,
+				   uint32_t *dirIsNeg, real_t t0, real_t t1) const {
+	Ray active_ray = packet.rays[active];
+        Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
+        dirIsNeg[0] = invDir.x < 0;
+	dirIsNeg[1] = invDir.y < 0;
+	dirIsNeg[2] = invDir.z < 0;
+
+	if (box.hit(invDir, active_ray.e, t0, t1, dirIsNeg))
+	    return active;
+	if (!box.hit(packet.frustum))
+	    return packet.size;
+	for (uint32_t i = active + 1; i < packet.size; i++) {
+	    Ray cur_ray = packet.rays[active];
+	    Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
+	    dirIsNeg[0] = invDir.x < 0;
+	    dirIsNeg[1] = invDir.y < 0;
+	    dirIsNeg[2] = invDir.z < 0;
+
+	    if (box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
+		return i;
+	}
+	
+	return packet.size;
+    }
+
+    void BVHAccel::traverse(const Packet& packet, hitRecord *records, 
+			    const real_t t0, const real_t t1) const {
+	if(!nodes)
+	    return ;
+	TraversalNode stack[64]; // fixed size?
+	uint32_t todoOffset = 0;
+	uint32_t nodeNum = 0;
+	uint32_t active = 0;
+	// t0s are all the same?
+	real_t t0s[packet.size];
+	real_t t1s[packet.size];
+        uint32_t dirIsNeg[3];
+	real_t t1_max = t1;
+
+	std::fill(t0s, t0s + packet.size, t0);
+	std::fill(t1s, t1s + packet.size, t1);
+	
+	hitRecord h1;
+	while (true) {
+            const LinearBVHNode *node = &nodes[nodeNum];
+
+	    // TODO: a better way to get t1_max?
+	    for (uint32_t i = active; i < packet.size; i++) {
+		t1_max = std::max(t1_max, t1s[i]);
+	    }
+
+	    uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
+	    if (cur_active < packet.size) {
+		if (node->nPrimitives == 0) {
+		    int todo_index;
+		    if (dirIsNeg[node->axis]) {
+			todo_index = nodeNum + 1;
+			nodeNum = node->secondChildOffset;
+		    }
+		    else {
+			todo_index = node->secondChildOffset;
+			nodeNum++;
+		    }
+		    TraversalNode stack_node(todo_index, cur_active);
+		    stack[todoOffset++] = stack_node;
+		}
+		else {
+		    for (uint32_t i = active; i < packet.size; i++) {
+			for (uint32_t j = 0; j < node->nPrimitives; j++) {
+			    // Use full record, since we still don't know how to deal with shadow ray (yet).
+			    if (primitives[node->primitivesOffset + j]->
+				hit(packet.rays[i], t0s[i], t1s[i], records[i], true)) {
+				if (t1s[i] > records[i].t)
+				    t1s[i] = records[i].t;
+			    }
+			}
+		    }
+		    
+		    if (todoOffset == 0)
+			break;
+		    nodeNum = stack[--todoOffset].node_index;
+		    active = stack[todoOffset].active;
+		}
+	    }
+	    else {
+		if (todoOffset == 0)
+		    break;
+		nodeNum = stack[--todoOffset].node_index;
+		active = stack[todoOffset].active;
+	    }
+	}
     }
 
     Geometry* BVHAccel::hit(const Ray& ray, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const

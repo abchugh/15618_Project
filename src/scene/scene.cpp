@@ -162,41 +162,42 @@ void Scene::reset()
 
 Color3 Scene::calculateDiffuseColor(Vector3 p,Vector3 n,Color3 kd) const
 {
-	/*Number of shadow rays fired to light source*/
-	const int sim = 1;
-	Color3 col(0,0,0);
-	for(unsigned int l=0;l<point_lights.size();l++)
+    /*Number of shadow rays fired to light source*/
+    // TODO: more shadow rays to use packet?
+    const int sim = 1;
+    Color3 col(0,0,0);
+    for(unsigned int l=0;l<point_lights.size();l++)
 	{
-		Color3 temp(0,0,0);
-		for(int s = 0; s<sim; s++)
+	    Color3 temp(0,0,0);
+	    for(int s = 0; s<sim; s++)
 		{
-			real_t x = random_gaussian(), y = random_gaussian(), z = random_gaussian();
-			Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
+		    real_t x = random_gaussian(), y = random_gaussian(), z = random_gaussian();
+		    Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
 			
-			Vector3 L = normalize(loc-p);
-			real_t NDotL = dot(n,L);
+		    Vector3 L = normalize(loc-p);
+		    real_t NDotL = dot(n,L);
 
-			if(NDotL>0)
+		    if(NDotL>0)
 			{
-				Ray shadowRay;
-				shadowRay.e = p;
-				shadowRay.d = loc-p;
-				hitRecord h;
+			    Ray shadowRay;
+			    shadowRay.e = p;
+			    shadowRay.d = loc-p;
+			    hitRecord h;
 				
-				//We just want to check if something is between the point and the source
-				if(!tree->hit(shadowRay, SLOP, 1, h, false))
+			    //We just want to check if something is between the point and the source
+			    if(!tree->hit(shadowRay, SLOP, 1, h, false))
 				{
-					Color3 c = point_lights[l].color;
-					real_t d = sqrt( dot(p-point_lights[l].position,p-point_lights[l].position) );
-					c /= point_lights[l].attenuation.constant + d*point_lights[l].attenuation.linear + d*d*point_lights[l].attenuation.quadratic;
-					temp += kd*c*NDotL;
+				    Color3 c = point_lights[l].color;
+				    real_t d = sqrt( dot(p-point_lights[l].position,p-point_lights[l].position) );
+				    c /= point_lights[l].attenuation.constant + d*point_lights[l].attenuation.linear + d*d*point_lights[l].attenuation.quadratic;
+				    temp += kd*c*NDotL;
 				}
 			}
 		}
-		//average over the simulations
-		col += temp/sim;
+	    //average over the simulations
+	    col += temp/sim;
 	}
-	return col;
+    return col;
 }
 static Ray distortRay(Ray r, real_t distortionWidth)
 {
@@ -250,96 +251,118 @@ void Scene::TransformModels(real_t translate, const Vector3 rotate)
 		buildBVH();
 	}
 }
-Color3 Scene::getColor(const Ray& r, std::vector<real_t> refractiveStack, int depth, real_t t0, real_t t1) const
+
+void Scene::getColors(const Packet& packet, std::vector<real_t> refractiveStack, Color3 *colors, int depth, real_t t0, real_t t1) const {
+    hitRecord records[packet.size];
+
+    tree->traverse(packet, records, t0, t1);
+
+    // Use the old function to handle secondary rays.
+    // TODO: replace color3 to buffer?
+    for (size_t i = 0; i < packet.size; i++) {
+	if (records[i].t < t1)
+	    colors[i] = getColor(packet.rays[i], refractiveStack, records[i],
+				 depth, t0, t1);
+    }
+}
+
+Color3 Scene::getColor(const Ray& r, std::vector<real_t> refractiveStack, hitRecord& h, int depth, real_t t0, real_t t1) const
 {
-	hitRecord h;
-	
+    // Invalid value.
+    if (h.t >= t1)
 	if(!tree->hit(r, t0, t1, h, true))
-		return Scene::background_color;	//Nothing hit, return background color
+	    return Scene::background_color;	//Nothing hit, return background color
 
-	//Add the ambient component
-	Color3 col(0,0,0);
-	if(h.mp.refractive_index == 0)
-		col += Scene::ambient_light*h.mp.ambient;
+    //Add the ambient component
+    Color3 col(0,0,0);
+    if(h.mp.refractive_index == 0)
+	col += Scene::ambient_light*h.mp.ambient;
 
-	//Add the diffuse component
-	Vector3 p = r.e + h.t*r.d;
-	if(h.mp.refractive_index == 0)
-		col += calculateDiffuseColor(p,h.n,h.mp.diffuse);
+    //Add the diffuse component
+    Vector3 p = r.e + h.t*r.d;
+    if(h.mp.refractive_index == 0)
+	col += calculateDiffuseColor(p,h.n,h.mp.diffuse);
 
-	if(depth>0)
+    if(depth>0)
 	{
-		real_t reflectedRatio;
-		Color3 reflectedColor(0,0,0);
-		Color3 refractedColor(0,0,0);
-		if(h.mp.specular!=Color3(0,0,0))
+	    real_t reflectedRatio;
+	    Color3 reflectedColor(0,0,0);
+	    Color3 refractedColor(0,0,0);
+	    if(h.mp.specular!=Color3(0,0,0))
 		{
-			Ray reflectedRay(p,normalize(r.d - 2 *dot(r.d,h.n) *h.n));
+		    Ray reflectedRay(p,normalize(r.d - 2 *dot(r.d,h.n) *h.n));
+		    hitRecord new_h;
+		    new_h.t = t1;
 				
-			if(num_glossy_reflection_samples>0)
+		    if(num_glossy_reflection_samples>0)
 			{
-				for(int i=0;i< num_glossy_reflection_samples;i++)
+			    for(int i=0;i< num_glossy_reflection_samples;i++)
 				{
-					Ray newRay = distortRay(reflectedRay,0.125);
-					reflectedColor += h.mp.specular*getColor(newRay, refractiveStack, depth-1, SLOP);
+				    Ray newRay = distortRay(reflectedRay,0.125);
+				    reflectedColor += h.mp.specular*getColor(newRay, refractiveStack,
+									     new_h, depth-1, SLOP);
 				}
-				reflectedColor /= num_glossy_reflection_samples;
+			    reflectedColor /= num_glossy_reflection_samples;
 			}
-			else
-				reflectedColor = h.mp.specular*getColor(reflectedRay,refractiveStack, depth-1, SLOP);
+		    else
+			reflectedColor = h.mp.specular*getColor(reflectedRay,refractiveStack, 
+								new_h, depth-1, SLOP);
 		}
 		
-		//Refraction not possible
-		if(h.mp.refractive_index == 0)
-			reflectedRatio = 1.0;
-		else
+	    //Refraction not possible
+	    if(h.mp.refractive_index == 0)
+		reflectedRatio = 1.0;
+	    else
 		{
-			real_t currentRI = refractiveStack.back();
-			if(currentRI == h.mp.refractive_index)
+		    real_t currentRI = refractiveStack.back();
+		    if(currentRI == h.mp.refractive_index)
 			{
-				if(refractiveStack.size()>0)
+			    if(refractiveStack.size()>0)
 				{
-					refractiveStack.pop_back();
-					h.mp.refractive_index = refractiveStack.back();
+				    refractiveStack.pop_back();
+				    h.mp.refractive_index = refractiveStack.back();
 				}
-				else
-					h.mp.refractive_index = Scene::refractive_index;
+			    else
+				h.mp.refractive_index = Scene::refractive_index;
 			}
-			else
-				refractiveStack.push_back(h.mp.refractive_index);
+		    else
+			refractiveStack.push_back(h.mp.refractive_index);
 			
-			real_t RIRatio = currentRI/h.mp.refractive_index;
+		    real_t RIRatio = currentRI/h.mp.refractive_index;
 			
-			if(RIRatio>1)	//If entering a rarer medium, reverse normal direction
-				h.n*=-1;
+		    if(RIRatio>1)	//If entering a rarer medium, reverse normal direction
+			h.n*=-1;
 			
-			real_t dDotN = dot(normalize(r.d),h.n);
-			real_t cosSq = 1-RIRatio*RIRatio*(1-dDotN*dDotN);
+		    real_t dDotN = dot(normalize(r.d),h.n);
+		    real_t cosSq = 1-RIRatio*RIRatio*(1-dDotN*dDotN);
 
-			if(cosSq<0)	//Total Internal Reflection
+		    if(cosSq<0)	//Total Internal Reflection
 			{
-				reflectedRatio = 1.0;
-				refractiveStack.push_back(currentRI);
+			    reflectedRatio = 1.0;
+			    refractiveStack.push_back(currentRI);
 			}
-			else
+		    else
 			{
-				real_t cosTheta = sqrt(cosSq);
-				Vector3 dir = (normalize(r.d) - h.n *dDotN)*RIRatio - h.n*cosTheta; 
-				Ray refractedRay(p,dir);
-				
-				refractedColor = getColor(refractedRay, refractiveStack,depth-1, SLOP);
+			    real_t cosTheta = sqrt(cosSq);
+			    Vector3 dir = (normalize(r.d) - h.n *dDotN)*RIRatio - h.n*cosTheta; 
+			    Ray refractedRay(p,dir);
+			    hitRecord new_h;
+			    new_h.t = t1;
 
-				if(h.mp.refractive_index<currentRI)
-					cosTheta = dDotN;
-				real_t normalReflectance = pow( (h.mp.refractive_index-1)/(h.mp.refractive_index+1),2);
-				reflectedRatio = normalReflectance + normalReflectance *pow(1-cosTheta,5);
+			    refractedColor = getColor(refractedRay, refractiveStack,
+						      new_h, depth-1, SLOP);
+
+			    if(h.mp.refractive_index<currentRI)
+				cosTheta = dDotN;
+			    real_t normalReflectance = pow( (h.mp.refractive_index-1)/(h.mp.refractive_index+1),2);
+			    reflectedRatio = normalReflectance + normalReflectance *pow(1-cosTheta,5);
 			}
 		}
-		//Add the two components to the pixel color
-		col += reflectedRatio*reflectedColor + (1-reflectedRatio)*refractedColor;
+	    //Add the two components to the pixel color
+	    col += reflectedRatio*reflectedColor + (1-reflectedRatio)*refractedColor;
 	}
-	//Finally multiply by the texture color
-	return col*h.mp.texColor;
+    //Finally multiply by the texture color
+    return col*h.mp.texColor;
 }
 
 void Scene::add_geometry( Geometry* g )

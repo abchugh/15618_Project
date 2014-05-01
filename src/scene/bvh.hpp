@@ -20,6 +20,7 @@ namespace _462 {
     
     class Geometry;
     struct hitRecord;
+    struct Packet;
 
     struct BVHBuildNode
     {
@@ -159,6 +160,21 @@ namespace _462 {
 	    return job;
 	}
     };
+
+    struct TraversalNode {
+	uint32_t node_index;
+	uint32_t active;
+	
+	TraversalNode() {
+	    node_index = active = -1;
+	}
+
+	TraversalNode(uint32_t index, uint32_t act) {
+	    node_index = index;
+	    active = act;
+	}
+    };
+
 #ifdef ISPC_SOA
     typedef ispc::BVHPrimitiveInfoList PrimitiveInfoList;
 #elif defined(ISPC_AOS)
@@ -180,6 +196,8 @@ namespace _462 {
 
 	void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
+	void traverse(const Packet& packet, hitRecord *records, const real_t t0, const real_t t1) const;
+
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
@@ -189,6 +207,9 @@ namespace _462 {
         uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
         
+	uint32_t getFirstHit(const Packet packet, const BoundingBox box, uint32_t active, 
+			     uint32_t *dirIsNeg, real_t t0, real_t t1) const;
+
         uint32_t maxPrimsInNode;
         enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };
         SplitMethod splitMethod;

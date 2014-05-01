@@ -1,4 +1,5 @@
 
+#include "scene/scene.hpp"
 #include "scene/BoundingBox.hpp"
 #include "scene/ray.hpp"
 
@@ -95,6 +96,40 @@ bool BoundingBox::hit(BoundingBox box)const
         if(lowCoord[i] > box.highCoord[i] || highCoord[i]< box.lowCoord[i] )
             return false;
     }
+    return true;
+}
+
+bool BoundingBox::hit(const Frustum& frustum) const {
+    // n/p vertex
+    Vector3 p;
+    Vector3 n;
+    Vector3 center = 0.5 * (lowCoord + highCoord);
+    Vector3 extent = 0.5 * (highCoord - lowCoord);
+
+    for (int i = 0; i < 6; i++) {
+	int x_sign = (-1 + 2 * (frustum.planes[i].norm.x >= 0));
+	int y_sign = (-1 + 2 * (frustum.planes[i].norm.y >= 0));
+	int z_sign = (-1 + 2 * (frustum.planes[i].norm.z >= 0));
+
+	p.x = center.x + x_sign * extent.x;
+	p.y = center.y + y_sign * extent.y;
+	p.z = center.z + z_sign * extent.z;
+
+	// p vertex is outside
+	if (dot(p - frustum.planes[i].point, frustum.planes[i].norm)
+	    < 0)
+	    return false;
+
+	n.x = center.x - x_sign * extent.x;
+	n.y = center.y - y_sign * extent.y;
+	n.z = center.z - z_sign * extent.z;
+
+	// n vertex is outside, given p vertex is inside
+	if (dot(n - frustum.planes[i].point, frustum.planes[i].norm)
+	    < 0)
+	    return true;
+    }
+
     return true;
 }
 

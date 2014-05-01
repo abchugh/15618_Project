@@ -113,12 +113,43 @@ Color3 Raytracer::trace_pixel(const Scene* scene,
 	std::vector<real_t> refractiveStack;
 	refractiveStack.push_back(scene->refractive_index);
 
-	res += scene->getColor(r, refractiveStack);
+	hitRecord h;
+	h.t = 1e30;
+	res += scene->getColor(r, refractiveStack, h);
     }
     return res*(real_t(1)/num_samples);
 }
 
-Packet Raytracer::build_packet(int x, int y, size_t width, size_t height) {
+void Raytracer::build_frustum(Frustum& frustum, real_t xmin, real_t xmax,
+		   real_t ymin, real_t ymax) {
+    // Primary packet is shot from eye position.
+    Vector3 eye = scene->camera.get_position();
+    Vector3 gaze = normalize(scene->camera.get_direction());
+
+    // Point to inside.
+    frustum.planes[FRONT].norm = -gaze;
+    frustum.planes[BACK].norm = gaze;
+
+    frustum.planes[FRONT].point = eye + gaze * 
+	scene->camera.get_near_clip();
+    frustum.planes[BACK].point = eye + gaze * 
+	scene->camera.get_far_clip();
+
+    Vector3 low_left = Ray::get_pixel_dir(xmin, ymin) - eye;
+    Vector3 low_right = Ray::get_pixel_dir(xmax, ymin) - eye;
+    Vector3 up_left = Ray::get_pixel_dir(xmin, ymax) - eye;
+    Vector3 up_right = Ray::get_pixel_dir(xmax, ymax) - eye;
+
+    frustum.planes[TOP].norm = cross(up_left, up_right);
+    frustum.planes[BOTTOM].norm = cross(low_right, low_left);
+    frustum.planes[LEFT].norm = cross(low_left, up_left);
+    frustum.planes[RIGHT].norm = cross(up_right, low_right);
+
+    frustum.planes[TOP].point = frustum.planes[BOTTOM].point = 
+	frustum.planes[LEFT].point = frustum.planes[RIGHT].point = eye;
+}
+
+Packet Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height) {
     real_t dx = real_t(1)/width;
     real_t dy = real_t(1)/height;
     Packet packet(packet_width_ray * packet_width_ray);
@@ -126,22 +157,26 @@ Packet Raytracer::build_packet(int x, int y, size_t width, size_t height) {
     real_t x_max = -BIG_NUMBER;
     real_t y_min = BIG_NUMBER;
     real_t y_max = -BIG_NUMBER;
+    size_t count = 0;
 
-    for (int j = 0; j < packet_width_pixel; j++) {
-	for (int i = 0; i < packet_width_pixel; i++) {
-	    int cur_x = x + i;
-	    int cur_y = y + j;
+    for (size_t j = 0; j < packet_width_pixel; j++) {
+	for (size_t i = 0; i < packet_width_pixel; i++) {
+	    size_t cur_x = x + i;
+	    size_t cur_y = y + j;
 
 	    if (cur_x >= width || cur_y >= height)
 		continue;
 
-	    for (int iter = 0; iter < num_samples; iter++) {
+	    for (size_t iter = 0; iter < num_samples; iter++) {
 		// pick a point within the pixel boundaries to fire our
 		// ray through.
 		real_t rand_i = real_t(2)*(real_t(cur_x)+random())*dx - real_t(1);
 		real_t rand_j = real_t(2)*(real_t(cur_y)+random())*dy - real_t(1);
 
 		Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(rand_i, rand_j));
+		packet.rays[count++] = r;
+
+		// Maybe it's better to use the pixel corners
 		x_min = std::min(x_min, real_t(rand_i));
 		x_max = std::max(x_max, real_t(rand_i));
 		y_min = std::min(y_min, real_t(rand_j));
@@ -150,13 +185,8 @@ Packet Raytracer::build_packet(int x, int y, size_t width, size_t height) {
 	}
     }
 
-    // xmin xmax
-    // 0 1   ymin
-    // 2 3   ymax
-    packet.corners[0] = Ray(scene->camera.get_position(), Ray::get_pixel_dir(x_min, y_min));
-    packet.corners[1] = Ray(scene->camera.get_position(), Ray::get_pixel_dir(x_max, y_min));
-    packet.corners[2] = Ray(scene->camera.get_position(), Ray::get_pixel_dir(x_min, y_max));
-    packet.corners[3] = Ray(scene->camera.get_position(), Ray::get_pixel_dir(x_max, y_max));
+    build_frustum(packet.frustum, x_min, x_max, y_min, y_max);
+    packet.size = packet_width_ray * packet_width_ray;
 
     return packet;
 }
@@ -164,35 +194,33 @@ Packet Raytracer::build_packet(int x, int y, size_t width, size_t height) {
 void Raytracer::trace_small_packet(unsigned char* buffer,
 				   size_t width,
 				   size_t height) {
-    int work_num_x = (width + pixel_width - 1) / pixel_width;
-    int work_num_y = (height + pixel_width - 1) / pixel_width;
+    size_t work_num_x = (width + pixel_width - 1) / pixel_width;
+    size_t work_num_y = (height + pixel_width - 1) / pixel_width;
 
-    int packet_ray_size = packet_width_ray * packet_width_ray;
-    int num_packet = (num_samples + packet_ray_size - 1) / packet_ray_size;
+    size_t packet_ray_size = packet_width_ray * packet_width_ray;
+    size_t num_packet = (num_samples + packet_ray_size) / packet_ray_size;
     
 #pragma omp parallel for schedule(dynamic)
-    for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
-	int cur_work_y = work_count / work_num_x;
-	int cur_work_x = work_count - cur_work_y * work_num_x;
-	int work_offset = work_count * pixel_width * pixel_width;
+    for (size_t work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+	size_t cur_work_y = work_count / work_num_x;
+	size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
-	for (int y = 0; y < pixel_width; y++) {
-	    for (int x = 0; x < pixel_width; x++) {
-		int p_x = cur_work_x * pixel_width + x;
-		int p_y = cur_work_y * pixel_width + y;
+	for (size_t y = 0; y < pixel_width; y++) {
+	    for (size_t x = 0; x < pixel_width; x++) {
+		size_t p_x = cur_work_x * pixel_width + x;
+		size_t p_y = cur_work_y * pixel_width + y;
 		if ((p_x + x) >= width || (p_y + y) >= height)
 		    continue;
 
 		Color3 cur_color = Color3::Black();
 		Color3 packet_color[packet_width_pixel * packet_width_pixel * num_samples]; // init?
 		
-		for (int i = 0; i < num_samples / (packet_width_ray * packet_width_ray);
-		     i++) {
+		for (size_t i = 0; i < num_packet; i++) {
 		    Packet packet = build_packet(p_x, p_y, width, height);
 
 		    // TODO: Get color
 
-		    for (int count = 0; count < num_samples; count++) 
+		    for (size_t count = 0; count < num_samples; count++) 
 			cur_color += packet_color[count];
 		}
 
@@ -207,34 +235,33 @@ void Raytracer::trace_large_packet(unsigned char* buffer,
 				   size_t width,
 				   size_t height) {
 
-    int work_num_x = (width + pixel_width - 1) / pixel_width;
-    int work_num_y = (height + pixel_width - 1) / pixel_width;
+    size_t work_num_x = (width + pixel_width - 1) / pixel_width;
+    size_t work_num_y = (height + pixel_width - 1) / pixel_width;
     
     // Work should be balanced automatically.
 #pragma omp parallel for schedule(dynamic)
-    for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
-	int cur_work_y = work_count / work_num_x;
-	int cur_work_x = work_count - cur_work_y * work_num_x;
-	int work_offset = work_count * pixel_width * pixel_width;
+    for (size_t work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+	size_t cur_work_y = work_count / work_num_x;
+	size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
 	// All numbers should have been rounded
-	for (int cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
-	    for (int cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
-		int p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
-		int p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
+	for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
+	    for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
+		size_t p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
+		size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
 		
 		Packet packet = build_packet(p_x, p_y, width, height);
 		
 		// TODO: Get color here. (func in scene)
 		Color3 packet_color[packet_width_pixel * packet_width_pixel * num_samples];
 		
-		for (int y = 0; y < packet_width_pixel; y++) {
-		    for (int x = 0; x < packet_width_pixel; x++) {
+		for (size_t y = 0; y < packet_width_pixel; y++) {
+		    for (size_t x = 0; x < packet_width_pixel; x++) {
 			Color3 cur_color = Color3::Black();
 			if ((p_x + x) >= width || (p_y + y) >= height)
 			    continue;
 
-			for (int count = 0; count < num_samples; count++) 
+			for (size_t count = 0; count < num_samples; count++) 
 			    cur_color += packet_color[y * packet_width_pixel * num_samples +
 						      x * num_samples + count];
 			cur_color = cur_color*(real_t(1)/num_samples);
@@ -323,7 +350,7 @@ void Raytracer::trace_large_packet(unsigned char* buffer,
 	}
 	else {
 	    // Recompute the unit amount of work
-	    int num_p = packet_width_ray * packet_width_ray / num_samples;
+	    size_t num_p = packet_width_ray * packet_width_ray / num_samples;
 	    packet_width_pixel = std::floor(std::sqrt(num_p));
 	    num_samples = packet_width_ray * packet_width_ray / (packet_width_pixel * packet_width_pixel);
 	    pixel_width = pixel_width / packet_width_pixel * packet_width_pixel;

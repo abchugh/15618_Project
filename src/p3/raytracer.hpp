@@ -23,6 +23,7 @@ class Ray;
 struct Intersection;
 struct Options;
 struct Packet;
+struct Frustum;
 
 class Raytracer
 {
@@ -45,7 +46,10 @@ private:
 		       size_t width,
 		       size_t height);
 
-    Packet build_packet(int x, int y, size_t width, size_t height);
+    void build_frustum(Frustum& frustum, real_t xmin, real_t xmax,
+		       real_t ymin, real_t ymax);
+
+    Packet build_packet(size_t x, size_t y, size_t width, size_t height);
 
     // when multiple packets inside one pixel
     void trace_small_packet(unsigned char* buffer,

@@ -7,6 +7,7 @@
 
 namespace _462 {
 class Ray;
+struct Frustum;
 class BoundingBox
 {
 public:
@@ -31,6 +32,9 @@ public:
 
     //check if a box intersects with another
     bool hit(BoundingBox box)const;
+
+    // Check against a frustum
+    bool hit(const Frustum& frustum) const;
 
     int MaximumExtent()const;
     Vector3 lowCoord, highCoord;
