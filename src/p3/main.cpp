@@ -69,8 +69,12 @@ struct Options
     const char* output_filename;
     // window dimensions
     int width, height;
-	int num_samples;
-	int num_glossy_reflection_samples;
+    int num_samples;
+    int num_glossy_reflection_samples;
+
+    int num_threads;
+    int pixel_width;
+    int packet_width_ray;
 };
 //QUICK AND DIRTY
 	int translations[] = {1,1,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
@@ -215,7 +219,7 @@ void RaytracerApplication::update( real_t delta_time )
         // do part of the raytrace
         if ( !raytrace_finished ) {
             assert( buffer );
-            raytrace_finished = raytracer.raytrace( buffer, &delta_time, false );
+            raytrace_finished = raytracer.raytrace( buffer, &delta_time, true );
         }
 		else
 		{
@@ -376,7 +380,9 @@ void RaytracerApplication::toggle_raytracing( int width, int height )
         // initialize the raytracer (first make sure camera aspect is correct)
         scene.camera.aspect = real_t( width ) / real_t( height );
 
-		if (!raytracer.initialize(&scene, options.num_samples, options.num_glossy_reflection_samples, width, height))
+		if (!raytracer.initialize(&scene, options.num_samples, options.num_glossy_reflection_samples,
+					  options.num_threads, options.pixel_width, options.packet_width_ray,
+					  width, height))
 	{
             std::cout << "Raytracer initialization failed.\n";
             return; // leave untoggled since initialization failed.
@@ -522,7 +528,7 @@ static void print_usage( const char* progname )
 {
     std::cout << "Usage: " << progname <<
 	"input_scene [-n num_samples] [-r] [-d width"
-	" height] [-o output_file]\n"
+	" height] [-o output_file] [-t number of threads] [-x width of work] [-r ray width in a packet]\n"
         "\n" \
         "Options:\n" \
         "\n" \
@@ -571,6 +577,9 @@ static bool parse_args( Options* opt, int argc, char* argv[] )
 	opt->height = DEFAULT_HEIGHT;
 	opt->num_samples = 5;
 	opt->num_glossy_reflection_samples = 0;
+	opt->num_threads = 8;
+	opt->pixel_width = 32;
+	opt->packet_width_ray = 16;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -600,8 +609,21 @@ static bool parse_args( Options* opt, int argc, char* argv[] )
 				opt->num_glossy_reflection_samples = atoi(argv[++i]);
 			break;
 		case 'o':
-			if (i < argc - 1)
-				opt->output_filename = argv[++i];
+		    if (i < argc - 1)
+			    opt->output_filename = argv[++i];
+		    break;
+		case 't': 
+		    if (i < argc - 1)
+			    opt->num_threads = atoi(argv[++i]);
+		    break;
+		case 'x':
+		    if (i < argc - 1)
+			    opt->pixel_width = atoi(argv[++i]);
+		    break;
+		case 'p':
+		    if (i < argc - 1)
+			    opt->packet_width_ray = atoi(argv[++i]);
+		    break;
 		}
 	}
 
@@ -654,7 +676,7 @@ int main( int argc, char* argv[] )
         }
         assert( app.buffer );
         // raytrace until done
-        app.raytracer.raytrace( app.buffer, 0, false );
+        app.raytracer.raytrace( app.buffer, 0, true );
         // output result
         app.output_image();
         return 0;

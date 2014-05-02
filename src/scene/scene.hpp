@@ -30,6 +30,9 @@ namespace _462 {
 	//Properties of the matrial of the object that was hit - ambient, diffuse, specular & texColor with refractive index.
 	MaterialProp mp;
 
+	hitRecord() {
+	    t = BIG_NUMBER;
+	}
     };
 
     enum PlanePosition { FRONT, BACK, TOP, BOTTOM, LEFT, RIGHT };
@@ -40,8 +43,11 @@ namespace _462 {
     };
 
     struct Frustum {
-	Ray corners[4];
 	Plane planes[6];
+
+	Frustum() {
+	    planes[0].norm = Vector3::Zero();
+	}
     };
 
     struct Packet {
@@ -55,7 +61,9 @@ namespace _462 {
 	}   
 
 	~Packet() {
-	    delete[] rays;
+	    if (rays != NULL)
+		delete[] rays;
+	    rays = NULL;
 	}
     };
 

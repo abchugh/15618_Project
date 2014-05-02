@@ -269,9 +269,12 @@ void Scene::getColors(const Packet& packet, std::vector<real_t> refractiveStack,
 Color3 Scene::getColor(const Ray& r, std::vector<real_t> refractiveStack, hitRecord& h, int depth, real_t t0, real_t t1) const
 {
     // Invalid value.
-    if (h.t >= t1)
+    if (h.t >= t1 - 1e-3) {
 	if(!tree->hit(r, t0, t1, h, true))
 	    return Scene::background_color;	//Nothing hit, return background color
+    }
+    else if (h.t < 0)
+	return Scene::background_color;	// Has been checked within a packet
 
     //Add the ambient component
     Color3 col(0,0,0);

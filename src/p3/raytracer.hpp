@@ -15,6 +15,7 @@
 
 #include "math/color.hpp"
 #include "math/random462.hpp"
+#include "math/vector.hpp"
 
 namespace _462 {
 
@@ -33,8 +34,9 @@ public:
 
     ~Raytracer();
 
-    bool initialize(Scene* scene,int num_samples, int num_glossy_reflection_samples, 
-		size_t width, size_t height);
+    bool initialize(Scene* scene, int num_samples, int num_glossy_reflection_samples,
+		    int num_threads, int pixel_width, int packet_width_ray,
+		    size_t width, size_t height);
 
     bool raytrace(unsigned char* buffer, real_t* max_time, bool packet_tracing);
 
@@ -45,7 +47,7 @@ private:
 		       size_t y,
 		       size_t width,
 		       size_t height);
-
+    Vector3 get_viewing_ray(size_t x, size_t y);
     void build_frustum(Frustum& frustum, real_t xmin, real_t xmax,
 		       real_t ymin, real_t ymax);
 
@@ -79,6 +81,8 @@ private:
     size_t packet_width_ray;
     // packet size (pixel)
     size_t packet_width_pixel;
+
+    size_t num_threads;
 };
 
 } /* _462 */

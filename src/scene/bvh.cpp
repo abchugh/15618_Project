@@ -1,5 +1,4 @@
 #include "bvh.hpp"
-
 #include "math/vector.hpp"
 #include "scene/scene.hpp"
 #include <SDL_timer.h>
@@ -649,7 +648,7 @@ finishUp:
         return myOffset;
     }
 
-    uint32_t BVHAccel::getFirstHit(const Packet packet, const BoundingBox box, uint32_t active,
+    uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox box, uint32_t active,
 				   uint32_t *dirIsNeg, real_t t0, real_t t1) const {
 	Ray active_ray = packet.rays[active];
         Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
@@ -662,7 +661,7 @@ finishUp:
 	if (!box.hit(packet.frustum))
 	    return packet.size;
 	for (uint32_t i = active + 1; i < packet.size; i++) {
-	    Ray cur_ray = packet.rays[active];
+	    Ray cur_ray = packet.rays[i];
 	    Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
 	    dirIsNeg[0] = invDir.x < 0;
 	    dirIsNeg[1] = invDir.y < 0;
@@ -696,12 +695,15 @@ finishUp:
 	while (true) {
             const LinearBVHNode *node = &nodes[nodeNum];
 
-	    // TODO: a better way to get t1_max?
+	    // TODO: a better way to get t1_max? Or do we actually need this?
+	    
 	    for (uint32_t i = active; i < packet.size; i++) {
 		t1_max = std::max(t1_max, t1s[i]);
 	    }
+	    
 
 	    uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
+
 	    if (cur_active < packet.size) {
 		if (node->nPrimitives == 0) {
 		    int todo_index;
@@ -713,10 +715,14 @@ finishUp:
 			todo_index = node->secondChildOffset;
 			nodeNum++;
 		    }
+		    active = cur_active;
+		    
 		    TraversalNode stack_node(todo_index, cur_active);
 		    stack[todoOffset++] = stack_node;
 		}
 		else {
+		    // TODO: SIMDize by rewriting hit function
+		    // Better to use large packet.
 		    for (uint32_t i = active; i < packet.size; i++) {
 			for (uint32_t j = 0; j < node->nPrimitives; j++) {
 			    // Use full record, since we still don't know how to deal with shadow ray (yet).
@@ -740,6 +746,13 @@ finishUp:
 		nodeNum = stack[--todoOffset].node_index;
 		active = stack[todoOffset].active;
 	    }
+	}
+
+	// Set t value of rays that miss all prim to negative.
+	// So we can go early out function getColor
+	for (uint32_t i = 0; i < packet.size; i++) {
+	    records[i].t = (records[i].t >= t1 - 1e-3) ? -1 :
+		records[i].t;
 	}
     }
 
