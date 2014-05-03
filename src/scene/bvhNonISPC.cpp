@@ -13,6 +13,7 @@ using namespace std;
 namespace _462 {
 #define BOX_THRESHOLD 10
 #define CENTROID_THRESHOLD 10
+
     struct CompareToVal {
         CompareToVal(int d, float v) { dim = d; val = v; }
         int dim;
@@ -58,7 +59,7 @@ namespace _462 {
         assert(b >= 0 && b < nBuckets);
         return b <= splitBucket;
     }
-    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer) {
+    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData) {
 	    int result;
 #ifndef _WINDOWS
 	    int num_threads = omp_get_max_threads();

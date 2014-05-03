@@ -32,7 +32,7 @@ namespace _462 {
 	swap(buildData.highCoordy[i],buildData.highCoordy[j]); 
 	swap(buildData.highCoordz[i],buildData.highCoordz[j]); 
     }
-    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer) {
+    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData) {
 	float *compareDim = buildData.centroidx;
 	if(dim == 1)
 		compareDim = buildData.centroidy;
