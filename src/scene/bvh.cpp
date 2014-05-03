@@ -32,11 +32,11 @@ namespace _462 {
             sum+=arr[i];
         return sum;
     }
-	static void reset()
-	{
-		for(int i=0;i<MAX_THREADS;i++)
-			t1[i] = t2[i] = t3[i] = t4[i] = t5[i] = t6[i] = t7[i] = t8[i] = tP[i] = 0;
-	}
+    static void reset()
+    {
+        for(int i=0;i<MAX_THREADS;i++)
+            t1[i] = t2[i] = t3[i] = t4[i] = t5[i] = t6[i] = t7[i] = t8[i] = tP[i] = 0;
+    }
 #else
 #define AddTimeSincePreviousTick(interval)
 #define GetTime(timeNew)
@@ -50,18 +50,18 @@ namespace _462 {
             deleteRecursive(node->children[1]);
         delete node;
     }
-    
+
     void initPrimitiveInfoList(const std::vector<Geometry*>& primitives, PrimitiveInfoList& list, bool allocateOnly = false);
     void AddBox(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box);
     void AddCentroid(const PrimitiveInfoList& buildData, uint32_t start, uint32_t end, BoundingBox & box);
-    
+
     void AddBox(const PrimitiveInfoList& buildData, uint32_t index, BoundingBox & box);
-    
+
     float getCentroidDim(const PrimitiveInfoList& buildData, int index, int dim);
     uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim);
     void clearList(PrimitiveInfoList& buildData);
     unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData);
-    
+
 
     bool queueData::updateStatus(queueData& data)
     {
@@ -89,7 +89,7 @@ namespace _462 {
         // Initialize _buildData_ array for primitives
         PrimitiveInfoList buildData;
         initPrimitiveInfoList(primitives, buildData);
-	
+
         uint32_t totalNodes = 0;
         vector< Geometry* > orderedPrims(primitives.size());
 
@@ -121,7 +121,7 @@ namespace _462 {
         time_t busy[MAX_THREADS] = {0}, idle[MAX_THREADS] = {0}, idleX[MAX_THREADS] = {0};
 #ifdef ENABLED_TIME_LOGS
         printf("Phases %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
-	reset();	
+        reset();	
 #endif
 
         printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
@@ -239,7 +239,7 @@ namespace _462 {
             nodes = NULL;
         }
     }
-    
+
     //TODO:convert into #define to check for perf improvement?
     void BVHAccel::buildLeaf(PrimitiveInfoList &buildData, uint32_t start,
         uint32_t end, vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox)
@@ -247,13 +247,13 @@ namespace _462 {
         GetTime(primitiveStart);
         for (uint32_t i = start; i < end; ++i)
         {
-	    uint32_t primitiveNo;
+            uint32_t primitiveNo;
 #ifdef ISPC_SOA
             primitiveNo = buildData.primitiveNumber[i];
 #elif defined(ISPC_AOS)
-	    memcpy(&primitiveNo, &(buildData[i].lowCoord.v[3]), sizeof(uint32_t));
+            memcpy(&primitiveNo, &(buildData[i].lowCoord.v[3]), sizeof(uint32_t));
 #else
-	    primitiveNo = buildData[i].primitiveNumber;
+            primitiveNo = buildData[i].primitiveNumber;
 #endif
             orderedPrims[i] = primitives[ primitiveNo ];
         }
@@ -305,92 +305,92 @@ namespace _462 {
                     goto finishUp;
                 }
 
-		// Partition primitives using approximate SAH
-		if (nPrimitives <= 4) {
-		    // Partition primitives into equally-sized subsets
-		    mid = SplitEqually(buildData, start, end, dim);
-		    AddTimeSincePreviousTick(t3);
+                // Partition primitives using approximate SAH
+                if (nPrimitives <= 4) {
+                    // Partition primitives into equally-sized subsets
+                    mid = SplitEqually(buildData, start, end, dim);
+                    AddTimeSincePreviousTick(t3);
 
-		}
-		else {
-		    // Allocate _BucketInfo_ for SAH partition buckets
-		    const int nBuckets = 12;
-		    struct BucketInfo {
-			BucketInfo() { count = 0; }
-			int count;
-			BoundingBox bounds;
-		    };
-		    BucketInfo buckets[nBuckets];
+                }
+                else {
+                    // Allocate _BucketInfo_ for SAH partition buckets
+                    const int nBuckets = 12;
+                    struct BucketInfo {
+                        BucketInfo() { count = 0; }
+                        int count;
+                        BoundingBox bounds;
+                    };
+                    BucketInfo buckets[nBuckets];
 
-		    // Initialize _BucketInfo_ for SAH partition buckets
-		    for (uint32_t j = 0; j < nPrimitives; ++j) {
-			uint32_t i = j + start;
-                            
-			float val = getCentroidDim(buildData, i, dim);
+                    // Initialize _BucketInfo_ for SAH partition buckets
+                    for (uint32_t j = 0; j < nPrimitives; ++j) {
+                        uint32_t i = j + start;
 
-			int b = nBuckets *
-			    ( (val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
-			if (b == nBuckets) b = nBuckets-1;
+                        float val = getCentroidDim(buildData, i, dim);
 
-			assert(b >= 0 && b < nBuckets);
-			buckets[b].count++;
-			AddBox(buildData, i, buckets[b].bounds);
-		    }
-		    AddTimeSincePreviousTick(t4);
+                        int b = nBuckets *
+                            ( (val - centroidBounds.lowCoord[dim]) / centroidBounds.extent(dim));
+                        if (b == nBuckets) b = nBuckets-1;
 
-		    // Compute costs for splitting after each bucket
-		    float cost[nBuckets-1];
-		    for (int i = 0; i < nBuckets-1; ++i) {
-			BoundingBox b0, b1;
-			int count0 = 0, count1 = 0;
-			for (int j = 0; j <= i; ++j) {
-			    b0.AddBox(buckets[j].bounds);
-			    count0 += buckets[j].count;
-			}
-			for (int j = i+1; j < nBuckets; ++j) {
-			    b1.AddBox(buckets[j].bounds);
-			    count1 += buckets[j].count;
-			}
-			cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
-			    bbox.SurfaceArea();
-			//printf("%f - %f - %f\n", b0.SurfaceArea(), b1.SurfaceArea(), bbox.SurfaceArea());
-		    }
-		    AddTimeSincePreviousTick(t5);
+                        assert(b >= 0 && b < nBuckets);
+                        buckets[b].count++;
+                        AddBox(buildData, i, buckets[b].bounds);
+                    }
+                    AddTimeSincePreviousTick(t4);
 
-		    // Find bucket to split at that minimizes SAH metric
-		    float minCost = cost[0];
-		    uint32_t minCostSplit = 0;
-		    for (int i = 1; i < nBuckets-1; ++i) {
+                    // Compute costs for splitting after each bucket
+                    float cost[nBuckets-1];
+                    for (int i = 0; i < nBuckets-1; ++i) {
+                        BoundingBox b0, b1;
+                        int count0 = 0, count1 = 0;
+                        for (int j = 0; j <= i; ++j) {
+                            b0.AddBox(buckets[j].bounds);
+                            count0 += buckets[j].count;
+                        }
+                        for (int j = i+1; j < nBuckets; ++j) {
+                            b1.AddBox(buckets[j].bounds);
+                            count1 += buckets[j].count;
+                        }
+                        cost[i] = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
+                            bbox.SurfaceArea();
+                        //printf("%f - %f - %f\n", b0.SurfaceArea(), b1.SurfaceArea(), bbox.SurfaceArea());
+                    }
+                    AddTimeSincePreviousTick(t5);
 
-			if (cost[i] < minCost) {
-			    minCost = cost[i];
-			    minCostSplit = i;
-			}
-		    }
-		    AddTimeSincePreviousTick(t6);
+                    // Find bucket to split at that minimizes SAH metric
+                    float minCost = cost[0];
+                    uint32_t minCostSplit = 0;
+                    for (int i = 1; i < nBuckets-1; ++i) {
 
-		    // Either create leaf or split primitives at selected SAH bucket
-		    if (nPrimitives > maxPrimsInNode || minCost < nPrimitives) {
-                            
-			float bmid = (minCostSplit + 1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
-			mid = partition(start, end, dim, bmid, buildData);
+                        if (cost[i] < minCost) {
+                            minCost = cost[i];
+                            minCostSplit = i;
+                        }
+                    }
+                    AddTimeSincePreviousTick(t6);
+
+                    // Either create leaf or split primitives at selected SAH bucket
+                    if (nPrimitives > maxPrimsInNode || minCost < nPrimitives) {
+
+                        float bmid = (minCostSplit + 1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
+                        mid = partition(start, end, dim, bmid, buildData);
 
 
-			/*if (start == mid || mid == end)
-			  printf("%d - %d - %d\n%d: l: %f; h: %f; m: %f\n", start, mid, end, minCostSplit,
-			  centroidBounds.lowCoord[dim], centroidBounds.highCoord[dim], bmid);*/
+                        /*if (start == mid || mid == end)
+                        printf("%d - %d - %d\n%d: l: %f; h: %f; m: %f\n", start, mid, end, minCostSplit,
+                        centroidBounds.lowCoord[dim], centroidBounds.highCoord[dim], bmid);*/
 
-			AddTimeSincePreviousTick(t7);
-		    }
+                        AddTimeSincePreviousTick(t7);
+                    }
 
-		    else {
-			buildLeaf(buildData,start,end, orderedPrims,node,bbox);
-			goto finishUp;
-		    }
+                    else {
+                        buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+                        goto finishUp;
+                    }
 
                 }
                 node->splitAxis = dim;
-		node->bounds = bbox;
+                node->bounds = bbox;
 
                 numInternalBranches = (nPrimitives>200)?1:2;
                 child1Data.start = start;
@@ -509,7 +509,7 @@ finishUp:
 
                 for (uint32_t i = s; i < e; ++i)
                 {                
-                    
+
                     float val = getCentroidDim(buildData, i, dim);
 
                     int b = nBuckets *
@@ -525,7 +525,7 @@ finishUp:
                 AddTimeSincePreviousTick(t4);
 
                 AddBox(buildData, s, e, subBbox[threadNo]);
-                
+
 #pragma omp barrier
                 if(threadNo==0)for(int i=0;i<maxNumThreads;i++)for(int b=0;b<nBuckets;b++) //can parallelize this. But is it worth the effort?
                 {
@@ -533,8 +533,8 @@ finishUp:
                     buckets[b].bounds.AddBox(subBuckets[i][b].bounds);
                 }
                 if(threadNo==0) for(int i=0;i<maxNumThreads;i++)
-                   bbox.AddBox(subBbox[i]);
-            
+                    bbox.AddBox(subBbox[i]);
+
 
                 AddTimeSincePreviousTick(t5);
 
@@ -575,7 +575,7 @@ finishUp:
             // Either create leaf or split primitives at selected SAH bucket
             if (nPrimitives > maxPrimsInNode ||
                 minCost < nPrimitives) {
-                    
+
                     float bmid = (minCostSplit+1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
                     mid = partition(start, end, dim, bmid, buildData);
             }
@@ -584,7 +584,7 @@ finishUp:
             AddTimeSincePreviousTick(t7);
 
             node->splitAxis = dim;
-	    node->bounds = bbox;
+            node->bounds = bbox;
 
             queueData child1Data = {start, mid, node, true, NULL};
             queueData child2Data = {mid,   end, node, false, NULL};
@@ -628,110 +628,111 @@ finishUp:
     }
 
     uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox box, uint32_t active,
-				   uint32_t *dirIsNeg, real_t t0, real_t t1) const {
-	Ray active_ray = packet.rays[active];
-        Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
-        dirIsNeg[0] = invDir.x < 0;
-	dirIsNeg[1] = invDir.y < 0;
-	dirIsNeg[2] = invDir.z < 0;
+        uint32_t *dirIsNeg, real_t t0, real_t t1) const {
+            Ray active_ray = packet.rays[active];
+            Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
+            dirIsNeg[0] = invDir.x < 0;
+            dirIsNeg[1] = invDir.y < 0;
+            dirIsNeg[2] = invDir.z < 0;
 
-	if (box.hit(invDir, active_ray.e, t0, t1, dirIsNeg))
-	    return active;
-	if (!box.hit(packet.frustum))
-	    return packet.size;
-	for (uint32_t i = active + 1; i < packet.size; i++) {
-	    Ray cur_ray = packet.rays[i];
-	    Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
-	    dirIsNeg[0] = invDir.x < 0;
-	    dirIsNeg[1] = invDir.y < 0;
-	    dirIsNeg[2] = invDir.z < 0;
+            if (box.hit(invDir, active_ray.e, t0, t1, dirIsNeg))
+                return active;
+            if (!box.hit(packet.frustum))
+                return packet.size;
+            for (uint32_t i = active + 1; i < packet.size; i++) {
+                Ray cur_ray = packet.rays[i];
+                Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
+                dirIsNeg[0] = invDir.x < 0;
+                dirIsNeg[1] = invDir.y < 0;
+                dirIsNeg[2] = invDir.z < 0;
 
-	    if (box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
-		return i;
-	}
-	
-	return packet.size;
+                if (box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
+                    return i;
+            }
+
+            return packet.size;
     }
 
     void BVHAccel::traverse(const Packet& packet, vector<hitRecord>& records, 
-			    const real_t t0, const real_t t1) const {
-	if(!nodes)
-	    return ;
-	TraversalNode stack[64]; // fixed size?
-	uint32_t todoOffset = 0;
-	uint32_t nodeNum = 0;
-	uint32_t active = 0;
-	// t0s are all the same?
-	vector<real_t> t0s(packet.size);
-	vector<real_t> t1s(packet.size);
-        uint32_t dirIsNeg[3];
-	real_t t1_max = t1;
+        const real_t t0, const real_t t1) const {
+            if(!nodes)
+                return ;
+            TraversalNode stack[64]; // fixed size?
+            uint32_t todoOffset = 0;
+            uint32_t nodeNum = 0;
+            uint32_t active = 0;
+            // t0s are all the same?
+            vector<real_t> t0s(packet.size);
+            vector<real_t> t1s(packet.size);
+            uint32_t dirIsNeg[3];
+            real_t t1_max = t1;
 
-    std::fill(t0s.begin(), t0s.end(), t0);
-    std::fill(t1s.begin(), t1s.end(), t1);
-	
-	hitRecord h1;
-	while (true) {
-            const LinearBVHNode *node = &nodes[nodeNum];
+            std::fill(t0s.begin(), t0s.end(), t0);
+            std::fill(t1s.begin(), t1s.end(), t1);
 
-	    // TODO: a better way to get t1_max? Or do we actually need this?
-	    
-	    for (uint32_t i = active; i < packet.size; i++) {
-		t1_max = std::max(t1_max, t1s[i]);
-	    }
+            hitRecord h1;
+            while (true) {
+                const LinearBVHNode *node = &nodes[nodeNum];
 
-	    uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
+                // TODO: a better way to get t1_max? Or do we actually need this?
 
-	    if (cur_active < packet.size) {
-		if (node->nPrimitives == 0) {
-		    int todo_index;
-		    if (dirIsNeg[node->axis]) {
-			todo_index = nodeNum + 1;
-			nodeNum = node->secondChildOffset;
-		    }
-		    else {
-			todo_index = node->secondChildOffset;
-			nodeNum++;
-		    }
-		    active = cur_active;
-		    
-		    TraversalNode stack_node(todo_index, cur_active);
-		    stack[todoOffset++] = stack_node;
-		}
-		else {
-		    // TODO: SIMDize by rewriting hit function
-		    // Better to use large packet.
-		    for (uint32_t i = active; i < packet.size; i++) {
-			for (uint32_t j = 0; j < node->nPrimitives; j++) {
-			    // Use full record, since we still don't know how to deal with shadow ray (yet).
-			    if (primitives[node->primitivesOffset + j]->
-				hit(packet.rays[i], t0s[i], t1s[i], records[i], true)) {
-				if (t1s[i] > records[i].t)
-				    t1s[i] = records[i].t;
-			    }
-			}
-		    }
-		    
-		    if (todoOffset == 0)
-			break;
-		    nodeNum = stack[--todoOffset].node_index;
-		    active = stack[todoOffset].active;
-		}
-	    }
-	    else {
-		if (todoOffset == 0)
-		    break;
-		nodeNum = stack[--todoOffset].node_index;
-		active = stack[todoOffset].active;
-	    }
-	}
+                for (uint32_t i = active; i < packet.size; i++) {
+                    t1_max = std::max(t1_max, t1s[i]);
+                }
 
-	// Set t value of rays that miss all prim to negative.
-	// So we can go early out function getColor
-	for (uint32_t i = 0; i < packet.size; i++) {
-	    records[i].t = (records[i].t >= t1 - 1e-3) ? -1 :
-		records[i].t;
-	}
+                uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
+
+                if (cur_active < packet.size) {
+                    if (node->nPrimitives == 0) {
+                        int todo_index;
+                        if (dirIsNeg[node->axis]) {
+                            todo_index = nodeNum + 1;
+                            nodeNum = node->secondChildOffset;
+                        }
+                        else {
+                            todo_index = node->secondChildOffset;
+                            nodeNum++;
+                        }
+                        active = cur_active;
+
+                        TraversalNode stack_node(todo_index, cur_active);
+                        stack[todoOffset++] = stack_node;
+                        assert(todoOffset<64);
+                    }
+                    else {
+                        // TODO: SIMDize by rewriting hit function
+                        // Better to use large packet.
+                        for (uint32_t i = active; i < packet.size; i++) {
+                            for (uint32_t j = 0; j < node->nPrimitives; j++) {
+                                // Use full record, since we still don't know how to deal with shadow ray (yet).
+                                if (primitives[node->primitivesOffset + j]->
+                                    hit(packet.rays[i], t0s[i], t1s[i], records[i], true)) {
+                                        if (t1s[i] > records[i].t)
+                                            t1s[i] = records[i].t;
+                                }
+                            }
+                        }
+
+                        if (todoOffset == 0)
+                            break;
+                        nodeNum = stack[--todoOffset].node_index;
+                        active = stack[todoOffset].active;
+                    }
+                }
+                else {
+                    if (todoOffset == 0)
+                        break;
+                    nodeNum = stack[--todoOffset].node_index;
+                    active = stack[todoOffset].active;
+                }
+            }
+
+            // Set t value of rays that miss all prim to negative.
+            // So we can go early out function getColor
+            for (uint32_t i = 0; i < packet.size; i++) {
+                records[i].t = (records[i].t >= t1 - 1e-3) ? -1 :
+                    records[i].t;
+            }
     }
 
     Geometry* BVHAccel::hit(const Ray& ray, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const

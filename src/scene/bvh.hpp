@@ -13,12 +13,12 @@
 
 #include "scene/BoundingBox.hpp"
 namespace _462 {
-    
+
     //#undef ISPC
-    #define NUM_IN_PRE_QUEUE 7
+#define NUM_IN_PRE_QUEUE 7
     //#define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
-    
+
     class Geometry;
     struct hitRecord;
     struct Packet;
@@ -28,11 +28,11 @@ namespace _462 {
         // BVHBuildNode Public Methods
         BVHBuildNode(BVHBuildNode *p, bool firstChild):parent(p),isFirstChild(firstChild)
         {
-	    children[0] = children[1] = NULL; 
-	    childComplete[0]=childComplete[1]=false; 
-	    nPrimitives = 0;
-	}
-        
+            children[0] = children[1] = NULL; 
+            childComplete[0]=childComplete[1]=false; 
+            nPrimitives = 0;
+        }
+
         void InitLeaf(uint32_t first, uint32_t n, const BoundingBox &b) {
             firstPrimOffset = first;
             nPrimitives = n;
@@ -54,7 +54,7 @@ namespace _462 {
 
         uint32_t splitAxis, firstPrimOffset, nPrimitives;
     };
-    
+
     const int DONT_USE_AND_DELETE = 0;
     const int USE_AND_DONT_DELETE = 1;
     const int USE_AND_DELETE = 2;
@@ -64,7 +64,7 @@ namespace _462 {
         uint32_t start, end;
         BVHBuildNode* parent;
         bool isFirstChild;
-        
+
         char* status;//when in both q and pq-> 1-use and dont delete, 0 don't use and delete,   when only in one of q and pq-> 2-use and delete
         bool operator<(const queueData& el)const
         {
@@ -80,9 +80,9 @@ namespace _462 {
             : primitiveNumber(pn),bounds(b) {
                 centroid = .5f * b.lowCoord + .5f * b.highCoord;
         }
-		uint32_t primitiveNumber;
-		Vector3 centroid;
-		BoundingBox bounds;
+        uint32_t primitiveNumber;
+        Vector3 centroid;
+        BoundingBox bounds;
     };
     struct LinearBVHNode {
         BoundingBox bounds;
@@ -96,20 +96,20 @@ namespace _462 {
         uint8_t pad[2];       // ensure 32 byte total size
     };
 
-    
+
 
     struct TraversalNode {
-	uint32_t node_index;
-	uint32_t active;
-	
-	TraversalNode() {
-	    node_index = active = -1;
-	}
+        uint32_t node_index;
+        uint32_t active;
 
-	TraversalNode(uint32_t index, uint32_t act) {
-	    node_index = index;
-	    active = act;
-	}
+        TraversalNode() {
+            node_index = active = -1;
+        }
+
+        TraversalNode(uint32_t index, uint32_t act) {
+            node_index = index;
+            active = act;
+        }
     };
 
 #ifdef ISPC_SOA
@@ -126,14 +126,14 @@ namespace _462 {
     {
     public:
         BVHAccel(const std::vector<Geometry*>& geometries, uint32_t maxPrims = 1,
-             const std::string &sm = "sah");
+            const std::string &sm = "sah");
 
         //bvhNode();
         ~BVHAccel();
 
-	void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
+        void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
-	void traverse(const Packet& packet, std::vector<hitRecord>& records, const real_t t0, const real_t t1) const;
+        void traverse(const Packet& packet, std::vector<hitRecord>& records, const real_t t0, const real_t t1) const;
 
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
@@ -141,11 +141,11 @@ namespace _462 {
         BVHBuildNode *fastRecursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
         void buildLeaf(PrimitiveInfoList &buildData, uint32_t start,
-        uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
+            uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
-        
-	uint32_t getFirstHit(const Packet& packet, const BoundingBox box, uint32_t active, 
-			     uint32_t *dirIsNeg, real_t t0, real_t t1) const;
+
+        uint32_t getFirstHit(const Packet& packet, const BoundingBox box, uint32_t active, 
+            uint32_t *dirIsNeg, real_t t0, real_t t1) const;
 
         uint32_t maxPrimsInNode;
         enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };

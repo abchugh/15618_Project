@@ -1,12 +1,12 @@
 /**
- * @file raytacer.cpp
- * @brief Raytracer class
- *
- * Implement these functions for project 4.
- *
- * @author H. Q. Bovik (hqbovik)
- * @bug Unimplemented
- */
+* @file raytacer.cpp
+* @brief Raytracer class
+*
+* Implement these functions for project 4.
+*
+* @author H. Q. Bovik (hqbovik)
+* @bug Unimplemented
+*/
 
 #include "raytracer.hpp"
 #include "scene/scene.hpp"
@@ -26,428 +26,425 @@ using namespace std;
 #endif
 namespace _462 {
 
-// max number of threads OpenMP can use. Change this if you like.
+    // max number of threads OpenMP can use. Change this if you like.
 #define MAX_THREADS 8
 
-struct Options;
+    struct Options;
 
-static const unsigned STEP_SIZE = 8;
+    static const unsigned STEP_SIZE = 8;
 
-static inline int nextPow2(int n)
-{
-    n--;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n++;
-  
-    return n;
-}
+    static inline int nextPow2(int n)
+    {
+        n--;
+        n |= n >> 1;
+        n |= n >> 2;
+        n |= n >> 4;
+        n |= n >> 8;
+        n |= n >> 16;
+        n++;
 
-Raytracer::Raytracer()
-    : scene(0), width(0), height(0) { }
+        return n;
+    }
 
-// random real_t in [0, 1)
-static inline real_t random()
-{
-    return real_t(rand())/RAND_MAX;
-}
+    Raytracer::Raytracer()
+        : scene(0), width(0), height(0) { }
 
-Raytracer::~Raytracer() { }
+    // random real_t in [0, 1)
+    static inline real_t random()
+    {
+        return real_t(rand())/RAND_MAX;
+    }
 
-/**
- * Initializes the raytracer for the given scene. Overrides any previous
- * initializations. May be invoked before a previous raytrace completes.
- * @param scene The scene to raytrace.
- * @param width The width of the image being raytraced.
- * @param height The height of the image being raytraced.
- * @return true on success, false on error. The raytrace will abort if
- *  false is returned.
- */
-bool Raytracer::initialize(Scene* scene, int num_samples, int num_glossy_reflection_samples,
-			   int num_threads, int pixel_width, int packet_width_ray,
-			   size_t width, size_t height)
-{
-    /*
-     * omp_set_num_threads sets the maximum number of threads OpenMP will
-     * use at once.
-     */
+    Raytracer::~Raytracer() { }
+
+    /**
+    * Initializes the raytracer for the given scene. Overrides any previous
+    * initializations. May be invoked before a previous raytrace completes.
+    * @param scene The scene to raytrace.
+    * @param width The width of the image being raytraced.
+    * @param height The height of the image being raytraced.
+    * @return true on success, false on error. The raytrace will abort if
+    *  false is returned.
+    */
+    bool Raytracer::initialize(Scene* scene, int num_samples, int num_glossy_reflection_samples,
+        int num_threads, int pixel_width, int packet_width_ray,
+        size_t width, size_t height)
+    {
+        /*
+        * omp_set_num_threads sets the maximum number of threads OpenMP will
+        * use at once.
+        */
 #ifdef OPENMP
-    omp_set_num_threads(MAX_THREADS);
+        omp_set_num_threads(MAX_THREADS);
 #endif
-    this->scene = scene;
-    this->num_samples = num_samples;
-    scene->SetGlossyReflectionSamples(num_glossy_reflection_samples);
-    this->width = width;
-    this->height = height;
+        this->scene = scene;
+        this->num_samples = num_samples;
+        scene->SetGlossyReflectionSamples(num_glossy_reflection_samples);
+        this->width = width;
+        this->height = height;
 
-    current_row = 0;
+        current_row = 0;
 
-    Ray::init(scene->camera);
-    //initialisation done in main
-    //scene->initialize();
+        Ray::init(scene->camera);
+        //initialisation done in main
+        //scene->initialize();
 
-    // Set parameters for packet tracing
-    // Every openmp thread grasps a pixel_width x pixel_width
-    // grid. Every packet contains 
-    // packet_width_ray x packet_width_ray rays.
-    this->pixel_width = pixel_width;
-    this->packet_width_ray = packet_width_ray;
-    
-    this->num_threads = num_threads;
+        // Set parameters for packet tracing
+        // Every openmp thread grasps a pixel_width x pixel_width
+        // grid. Every packet contains 
+        // packet_width_ray x packet_width_ray rays.
+        this->pixel_width = pixel_width;
+        this->packet_width_ray = packet_width_ray;
 
-    return true;
-}
+        this->num_threads = num_threads;
 
-/**
- * Performs a raytrace on the given pixel on the current scene.
- * The pixel is relative to the bottom-left corner of the image.
- * @param scene The scene to trace.
- * @param x The x-coordinate of the pixel to trace.
- * @param y The y-coordinate of the pixel to trace.
- * @param width The width of the screen in pixels.
- * @param height The height of the screen in pixels.
- * @return The color of that pixel in the final image.
- */
-Color3 Raytracer::trace_pixel(const Scene* scene,
-			      size_t x,
-			      size_t y,
-			      size_t width,
-			      size_t height)
-{
-    assert(x < width);
-    assert(y < height);
+        return true;
+    }
 
-    real_t dx = real_t(1)/width;
-    real_t dy = real_t(1)/height;
-
-    Color3 res = Color3::Black();
-    unsigned int iter;
-
-    for (iter = 0; iter < num_samples; iter++)
+    /**
+    * Performs a raytrace on the given pixel on the current scene.
+    * The pixel is relative to the bottom-left corner of the image.
+    * @param scene The scene to trace.
+    * @param x The x-coordinate of the pixel to trace.
+    * @param y The y-coordinate of the pixel to trace.
+    * @param width The width of the screen in pixels.
+    * @param height The height of the screen in pixels.
+    * @return The color of that pixel in the final image.
+    */
+    Color3 Raytracer::trace_pixel(const Scene* scene,
+        size_t x,
+        size_t y,
+        size_t width,
+        size_t height)
     {
-        // pick a point within the pixel boundaries to fire our
-        // ray through.
-        real_t i = real_t(2)*(real_t(x)+random())*dx - real_t(1);
-        real_t j = real_t(2)*(real_t(y)+random())*dy - real_t(1);
+        assert(x < width);
+        assert(y < height);
 
-        Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(i, j));
-	std::vector<real_t> refractiveStack;
-	refractiveStack.push_back(scene->refractive_index);
+        real_t dx = real_t(1)/width;
+        real_t dy = real_t(1)/height;
 
-	hitRecord h;
-	h.t = 1e30;
-	res += scene->getColor(r, refractiveStack, h);
-    }
-    return res*(real_t(1)/num_samples);
-}
+        Color3 res = Color3::Black();
+        unsigned int iter;
 
-void Raytracer::build_frustum(Frustum& frustum, real_t xmin, real_t xmax,
-		   real_t ymin, real_t ymax) {
-    // Primary packet is shot from eye position.
-    Vector3 eye = scene->camera.get_position();
-    Vector3 gaze = scene->camera.get_direction();
+        for (iter = 0; iter < num_samples; iter++)
+        {
+            // pick a point within the pixel boundaries to fire our
+            // ray through.
+            real_t i = real_t(2)*(real_t(x)+random())*dx - real_t(1);
+            real_t j = real_t(2)*(real_t(y)+random())*dy - real_t(1);
 
-    // Point to inside.
-    frustum.planes[FRONT].norm = gaze;
-    frustum.planes[BACK].norm = -gaze;
+            Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(i, j));
+            std::vector<real_t> refractiveStack;
+            refractiveStack.push_back(scene->refractive_index);
 
-    frustum.planes[FRONT].point = eye + gaze * 
-	scene->camera.get_near_clip();
-    frustum.planes[BACK].point = eye + gaze * 
-	scene->camera.get_far_clip();
-
-    Vector3 low_left = get_viewing_ray(xmin, ymin);
-    Vector3 low_right = get_viewing_ray(xmax, ymin);
-    Vector3 up_left = get_viewing_ray(xmin, ymax);
-    Vector3 up_right = get_viewing_ray(xmax, ymax);
-
-    frustum.planes[TOP].norm = cross(up_left, up_right);
-    frustum.planes[BOTTOM].norm = cross(low_right, low_left);
-    frustum.planes[LEFT].norm = cross(low_left, up_left);
-    frustum.planes[RIGHT].norm = cross(up_right, low_right);
-
-    frustum.planes[TOP].point = frustum.planes[BOTTOM].point = 
-	frustum.planes[LEFT].point = frustum.planes[RIGHT].point = eye;
-}
-
-// calculate direction of initial viewing ray from camera
-Vector3 Raytracer::get_viewing_ray(size_t x, size_t y) {
-    // normalized camera direction
-    Vector3 gaze = scene->camera.get_direction();
-    // normalized camera up direction
-    Vector3 up = scene->camera.get_up();
-    // normalized camera right direction
-    Vector3 right = cross(gaze, up);
-    // camera field of view
-    float fov = scene->camera.get_fov_radians();
-    // t, b, r, and l are the border disances of the image plane
-    real_t t = tan((width / height) * fov / 2.0);
-    real_t r = (t * width) / height;
-    real_t b = -1.0 * t;
-    real_t l = -1.0 * r;
-    // the pixel's horizontal coordinate on image plane
-    real_t u = l + (r - l) * (x + 0.5) / width;
-    // the pixel's vertical coordinate on image plane
-    real_t v = b + (t - b) * (y + 0.5) / height;
-    // Shirley uses the near plane for the below calculation; we'll just use 1
-    Vector3 view_ray = gaze + (u * right) + (v * up);
-
-    return view_ray; // viewing ray direction
-}
-
-void Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height, Packet& packet) {
-    real_t dx = real_t(1)/width;
-    real_t dy = real_t(1)/height;
-    size_t x_min;
-    size_t x_max;
-    size_t y_min;
-    size_t y_max;
-    size_t count = 0;
-
-    size_t iterations = std::min(packet.size, num_samples);
-
-    for (size_t j = 0; j < packet_width_pixel; j++) {
-	for (size_t i = 0; i < packet_width_pixel; i++) {
-	    size_t cur_x = x + i;
-	    size_t cur_y = y + j;
-
-	    if (cur_x >= width || cur_y >= height)
-		continue;
-
-	    for (size_t iter = 0; iter < iterations; iter++) {
-		// pick a point within the pixel boundaries to fire our
-		// ray through.
-		real_t rand_i = real_t(2)*(real_t(cur_x)+random())*dx - real_t(1);
-		real_t rand_j = real_t(2)*(real_t(cur_y)+random())*dy - real_t(1);
-
-		Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(rand_i, rand_j));
-
-		// TODO: a better way?
-		packet.e_x[count] = r.e[0];
-		packet.e_y[count] = r.e[1];
-		packet.e_z[count] = r.e[2];
-		packet.d_x[count] = r.d[0];
-		packet.d_y[count] = r.d[1];
-		packet.d_z[count] = r.d[2];
-
-		packet.rays[count++] = r;
-	    }
-	}
+            hitRecord h;
+            h.t = 1e30;
+            res += scene->getColor(r, refractiveStack, h);
+        }
+        return res*(real_t(1)/num_samples);
     }
 
-    x_min = x;
-    x_max = x + packet_width_pixel;
-    y_min = y;
-    y_max = y + packet_width_pixel;
+    void Raytracer::build_frustum(Frustum& frustum, real_t xmin, real_t xmax,
+        real_t ymin, real_t ymax) {
+            // Primary packet is shot from eye position.
+            Vector3 eye = scene->camera.get_position();
+            Vector3 gaze = scene->camera.get_direction();
 
-    build_frustum(packet.frustum, x_min, x_max, y_min, y_max);
+            // Point to inside.
+            frustum.planes[FRONT].norm = gaze;
+            frustum.planes[BACK].norm = -gaze;
 
-    packet.size = packet_width_ray * packet_width_ray;
-}
+            frustum.planes[FRONT].point = eye + gaze * 
+                scene->camera.get_near_clip();
+            frustum.planes[BACK].point = eye + gaze * 
+                scene->camera.get_far_clip();
 
-void Raytracer::trace_small_packet(unsigned char* buffer,
-				   size_t width,
-				   size_t height) {
-    size_t work_num_x = (width + pixel_width - 1) / pixel_width;
-    size_t work_num_y = (height + pixel_width - 1) / pixel_width;
+            Vector3 low_left = get_viewing_ray(xmin, ymin);
+            Vector3 low_right = get_viewing_ray(xmax, ymin);
+            Vector3 up_left = get_viewing_ray(xmin, ymax);
+            Vector3 up_right = get_viewing_ray(xmax, ymax);
 
-    size_t packet_ray_size = packet_width_ray * packet_width_ray;
-    size_t num_packet = (num_samples + packet_ray_size) / packet_ray_size;
-    std::vector<real_t> refractiveStack;
-    refractiveStack.push_back(scene->refractive_index);
+            frustum.planes[TOP].norm = cross(up_left, up_right);
+            frustum.planes[BOTTOM].norm = cross(low_right, low_left);
+            frustum.planes[LEFT].norm = cross(low_left, up_left);
+            frustum.planes[RIGHT].norm = cross(up_right, low_right);
+
+            frustum.planes[TOP].point = frustum.planes[BOTTOM].point = 
+                frustum.planes[LEFT].point = frustum.planes[RIGHT].point = eye;
+    }
+
+    // calculate direction of initial viewing ray from camera
+    Vector3 Raytracer::get_viewing_ray(size_t x, size_t y) {
+        // normalized camera direction
+        Vector3 gaze = scene->camera.get_direction();
+        // normalized camera up direction
+        Vector3 up = scene->camera.get_up();
+        // normalized camera right direction
+        Vector3 right = cross(gaze, up);
+        // camera field of view
+        float fov = scene->camera.get_fov_radians();
+        // t, b, r, and l are the border disances of the image plane
+        real_t t = tan((width / height) * fov / 2.0);
+        real_t r = (t * width) / height;
+        real_t b = -1.0 * t;
+        real_t l = -1.0 * r;
+        // the pixel's horizontal coordinate on image plane
+        real_t u = l + (r - l) * (x + 0.5) / width;
+        // the pixel's vertical coordinate on image plane
+        real_t v = b + (t - b) * (y + 0.5) / height;
+        // Shirley uses the near plane for the below calculation; we'll just use 1
+        Vector3 view_ray = gaze + (u * right) + (v * up);
+
+        return view_ray; // viewing ray direction
+    }
+
+    void Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height, Packet& packet) {
+        real_t dx = real_t(1)/width;
+        real_t dy = real_t(1)/height;
+        size_t x_min;
+        size_t x_max;
+        size_t y_min;
+        size_t y_max;
+        size_t count = 0;
+
+        size_t iterations = std::min(packet.size, num_samples);
+
+        for (size_t j = 0; j < packet_width_pixel; j++) {
+            for (size_t i = 0; i < packet_width_pixel; i++) {
+                size_t cur_x = x + i;
+                size_t cur_y = y + j;
+
+                if (cur_x >= width || cur_y >= height)
+                    continue;
+
+                for (size_t iter = 0; iter < iterations; iter++) {
+                    // pick a point within the pixel boundaries to fire our
+                    // ray through.
+                    real_t rand_i = real_t(2)*(real_t(cur_x)+random())*dx - real_t(1);
+                    real_t rand_j = real_t(2)*(real_t(cur_y)+random())*dy - real_t(1);
+
+                    Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(rand_i, rand_j));
+
+                    // TODO: a better way?
+                    packet.e_x[count] = r.e[0];
+                    packet.e_y[count] = r.e[1];
+                    packet.e_z[count] = r.e[2];
+                    packet.d_x[count] = r.d[0];
+                    packet.d_y[count] = r.d[1];
+                    packet.d_z[count] = r.d[2];
+
+                    packet.rays[count++] = r;
+                }
+            }
+        }
+
+        x_min = x;
+        x_max = x + packet_width_pixel;
+        y_min = y;
+        y_max = y + packet_width_pixel;
+
+        build_frustum(packet.frustum, x_min, x_max, y_min, y_max);
+
+        packet.size = packet_width_ray * packet_width_ray;
+    }
+
+    void Raytracer::trace_small_packet(unsigned char* buffer,
+        size_t width,
+        size_t height) {
+            size_t work_num_x = (width + pixel_width - 1) / pixel_width;
+            size_t work_num_y = (height + pixel_width - 1) / pixel_width;
+
+            size_t packet_ray_size = packet_width_ray * packet_width_ray;
+            size_t num_packet = (num_samples + packet_ray_size) / packet_ray_size;
+            std::vector<real_t> refractiveStack;
+            refractiveStack.push_back(scene->refractive_index);
 
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-    for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
-	size_t cur_work_y = work_count / work_num_x;
-	size_t cur_work_x = work_count - cur_work_y * work_num_x;
+            for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+                size_t cur_work_y = work_count / work_num_x;
+                size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
-	for (size_t y = 0; y < pixel_width; y++) {
-	    for (size_t x = 0; x < pixel_width; x++) {
-		size_t p_x = cur_work_x * pixel_width + x;
-		size_t p_y = cur_work_y * pixel_width + y;
-		if ((p_x) >= width || (p_y) >= height)
-		    continue;
+                for (size_t y = 0; y < pixel_width; y++) {
+                    for (size_t x = 0; x < pixel_width; x++) {
+                        size_t p_x = cur_work_x * pixel_width + x;
+                        size_t p_y = cur_work_y * pixel_width + y;
+                        if ((p_x) >= width || (p_y) >= height)
+                            continue;
 
-		Color3 cur_color = Color3::Black();
-		vector<Color3> packet_color(packet_ray_size);
+                        Color3 cur_color = Color3::Black();
+                        vector<Color3> packet_color(packet_ray_size);
 
-		// Shoot packet one by one to the same pixel
-		for (size_t i = 0; i < num_packet; i++) {
-		    Packet packet(packet_width_ray * packet_width_ray);
-		    build_packet(p_x, p_y, width, height, packet);
+                        // Shoot packet one by one to the same pixel
+                        for (size_t i = 0; i < num_packet; i++) {
+                            Packet packet(packet_width_ray * packet_width_ray);
+                            build_packet(p_x, p_y, width, height, packet);
 
-		    // Get color
-		    scene->getColors(packet, refractiveStack,
-		    		     packet_color);
-		    
-		    for (size_t count = 0; count < packet_ray_size; count++) 
-			cur_color += packet_color[count];
-		}
+                            // Get color
+                            scene->getColors(packet, refractiveStack,
+                                packet_color);
 
-		cur_color = cur_color*(real_t(1)/(num_packet * packet_ray_size));
-		cur_color.to_array(&buffer[4 * ((p_y) * width + p_x)]);
-	    }
-	}
+                            for (size_t count = 0; count < packet_ray_size; count++) 
+                                cur_color += packet_color[count];
+                        }
+
+                        cur_color = cur_color*(real_t(1)/(num_packet * packet_ray_size));
+                        cur_color.to_array(&buffer[4 * ((p_y) * width + p_x)]);
+                    }
+                }
+            }
     }
-}
 
-void Raytracer::trace_large_packet(unsigned char* buffer,
-				   size_t width,
-				   size_t height) {
+    void Raytracer::trace_large_packet(unsigned char* buffer, size_t width, size_t height) {
 
-    size_t work_num_x = (width + pixel_width - 1) / pixel_width;
-    size_t work_num_y = (height + pixel_width - 1) / pixel_width;
-    std::vector<real_t> refractiveStack;
-    refractiveStack.push_back(scene->refractive_index);
+            size_t work_num_x = (width + pixel_width - 1) / pixel_width;
+            size_t work_num_y = (height + pixel_width - 1) / pixel_width;
+            std::vector<real_t> refractiveStack;
+            refractiveStack.push_back(scene->refractive_index);
 
-    // Work should be balanced automatically.
+            // Work should be balanced automatically.
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-    for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
-	size_t cur_work_y = work_count / work_num_x;
-	size_t cur_work_x = work_count - cur_work_y * work_num_x;
+            for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+                size_t cur_work_y = work_count / work_num_x;
+                size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
-	// All numbers should have been rounded
-	for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
-	    for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
-		size_t p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
-		size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
+                // All numbers should have been rounded
+                for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
+                    for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
+                        size_t p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
+                        size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
 
-		// Clamped along the boundary.
-		Packet packet(packet_width_ray * packet_width_ray);
-		build_packet(p_x, p_y, width, height, packet);
-		
-		// Get color here. (func in scene)
-		vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
-		
-		scene->getColors(packet, refractiveStack,
-				 packet_color);
+                        // Clamped along the boundary.
+                        Packet packet(packet_width_ray * packet_width_ray);
+                        build_packet(p_x, p_y, width, height, packet);
 
-		for (size_t y = 0; y < packet_width_pixel; y++) {
-		    for (size_t x = 0; x < packet_width_pixel; x++) {
-			Color3 cur_color = Color3::Black();
-			if ((p_x + x) >= width || (p_y + y) >= height)
-			    continue;
-			
-			for (size_t count = 0; count < num_samples; count++) 
-			    cur_color += packet_color[y * packet_width_pixel * num_samples +
-						      x * num_samples + count];
-			
-			cur_color = cur_color*(real_t(1)/num_samples);
-			cur_color.to_array(&buffer[4 * ((p_y + y) * width + p_x + x)]);
-		    }
-		}
-	    }
-	}
+                        // Get color here. (func in scene)
+                        vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
+
+                        scene->getColors(packet, refractiveStack,packet_color);
+
+                        for (size_t y = 0; y < packet_width_pixel; y++) {
+                            for (size_t x = 0; x < packet_width_pixel; x++) {
+                                Color3 cur_color = Color3::Black();
+                                if ((p_x + x) >= width || (p_y + y) >= height)
+                                    continue;
+
+                                for (size_t count = 0; count < num_samples; count++) 
+                                    cur_color += packet_color[y * packet_width_pixel * num_samples +
+                                    x * num_samples + count];
+
+                                cur_color = cur_color*(real_t(1)/num_samples);
+                                cur_color.to_array(&buffer[4 * ((p_y + y) * width + p_x + x)]);
+                            }
+                        }
+                    }
+                }
+            }
     }
-}
 
 
-/**
- * Raytraces some portion of the scene. Should raytrace for about
- * max_time duration and then return, even if the raytrace is not copmlete.
- * The results should be placed in the given buffer.
- * @param buffer The buffer into which to place the color data. It is
- *  32-bit RGBA (4 bytes per pixel), in row-major order.
- * @param max_time, If non-null, the maximum suggested time this
- *  function raytrace before returning, in seconds. If null, the raytrace
- *  should run to completion.
- * @return true if the raytrace is complete, false if there is more
- *  work to be done.
- */
+    /**
+    * Raytraces some portion of the scene. Should raytrace for about
+    * max_time duration and then return, even if the raytrace is not copmlete.
+    * The results should be placed in the given buffer.
+    * @param buffer The buffer into which to place the color data. It is
+    *  32-bit RGBA (4 bytes per pixel), in row-major order.
+    * @param max_time, If non-null, the maximum suggested time this
+    *  function raytrace before returning, in seconds. If null, the raytrace
+    *  should run to completion.
+    * @return true if the raytrace is complete, false if there is more
+    *  work to be done.
+    */
     bool Raytracer::raytrace(unsigned char* buffer, real_t* max_time, bool packet_tracing)
-{
-    static time_t startTime = SDL_GetTicks();
-    if(current_row==0)
-	startTime = SDL_GetTicks();
-	
-    // TODO Add any modifications to this algorithm, if needed.
-	
-    //static const size_t PRINT_INTERVAL = 64;
-
-    // the time in milliseconds that we should stop
-    unsigned int end_time = 0;
-    bool is_done = false;
-
-    if (max_time)
     {
-        // convert duration to milliseconds
-        unsigned int duration = (unsigned int) (*max_time * 1000);
-        end_time = SDL_GetTicks() + duration;
-    }
+        static time_t startTime = SDL_GetTicks();
+        if(current_row==0)
+            startTime = SDL_GetTicks();
 
-    if (!packet_tracing) {
-	// until time is up, run the raytrace. we render an entire group of
-	// rows at once for simplicity and efficiency.
-	for (; !max_time || end_time > SDL_GetTicks(); current_row += STEP_SIZE)
-	    {
-		// we're done if we finish the last row
-		is_done = current_row >= height;
-		// break if we finish
-		if (is_done) break;
+        // TODO Add any modifications to this algorithm, if needed.
 
-		int loop_upper = std::min(current_row + STEP_SIZE, height);
+        //static const size_t PRINT_INTERVAL = 64;
 
-		// This tells OpenMP that this loop can be parallelized.
+        // the time in milliseconds that we should stop
+        unsigned int end_time = 0;
+        bool is_done = false;
+
+        if (max_time)
+        {
+            // convert duration to milliseconds
+            unsigned int duration = (unsigned int) (*max_time * 1000);
+            end_time = SDL_GetTicks() + duration;
+        }
+
+        if (!packet_tracing) {
+            // until time is up, run the raytrace. we render an entire group of
+            // rows at once for simplicity and efficiency.
+            for (; !max_time || end_time > SDL_GetTicks(); current_row += STEP_SIZE)
+            {
+                // we're done if we finish the last row
+                is_done = current_row >= height;
+                // break if we finish
+                if (is_done) break;
+
+                int loop_upper = std::min(current_row + STEP_SIZE, height);
+
+                // This tells OpenMP that this loop can be parallelized.
 #pragma omp parallel for
-		for (int c_row = current_row; c_row < loop_upper; c_row++)
-		    {
-			/*
-			 * This defines a critical region of code that should be
-			 * executed sequentially.
-			 */
-			/*#pragma omp critical
-			  {
-			  if (c_row % PRINT_INTERVAL == 0)
-			  printf("Raytracing (Row %d)\n", c_row);
-			  }*/
+                for (int c_row = current_row; c_row < loop_upper; c_row++)
+                {
+                    /*
+                    * This defines a critical region of code that should be
+                    * executed sequentially.
+                    */
+                    /*#pragma omp critical
+                    {
+                    if (c_row % PRINT_INTERVAL == 0)
+                    printf("Raytracing (Row %d)\n", c_row);
+                    }*/
 
-			for (size_t x = 0; x < width; x++)
-			    {
-				// trace a pixel
-				Color3 color = trace_pixel(scene, x, c_row, width, height);
-				// write the result to the buffer, always use 1.0 as the alpha
-				color.to_array(&buffer[4 * (c_row * width + x)]);
-			    }
-		    }
-	    }
+                    for (size_t x = 0; x < width; x++)
+                    {
+                        // trace a pixel
+                        Color3 color = trace_pixel(scene, x, c_row, width, height);
+                        // write the result to the buffer, always use 1.0 as the alpha
+                        color.to_array(&buffer[4 * (c_row * width + x)]);
+                    }
+                }
+            }
+        }
+        else {
+            if (num_samples >= packet_width_ray * packet_width_ray) {
+                packet_width_pixel = 1;
+                printf("pp: %ld; #s: %ld; wp: %ld\n", packet_width_pixel, num_samples, pixel_width);
+
+                trace_small_packet(buffer, width, height);
+                is_done = true;
+            }
+            else {
+                // Recompute the unit amount of work
+                // So a packet can perfectly cover a square area of pixels.
+                size_t num_p = packet_width_ray * packet_width_ray / num_samples;
+                packet_width_pixel = (uint32_t)(std::floor(std::sqrt(num_p)));
+
+                // Given packet_width_ray is a power of 2, rounding the pixel width to next
+                // power of 2 would make this value divisible (only when it's not a power of 2)
+                if (packet_width_pixel & (packet_width_pixel - 1))
+                    packet_width_pixel = nextPow2(packet_width_pixel);
+                num_samples = packet_width_ray * packet_width_ray / (packet_width_pixel * packet_width_pixel);
+                pixel_width /= packet_width_pixel;
+                pixel_width *= packet_width_pixel;
+
+                printf("#p: %ld; pp: %ld; #s: %ld; wp: %ld\n", num_p, packet_width_pixel, num_samples, pixel_width);
+
+                trace_large_packet(buffer, width, height);
+                is_done = true;
+            }
+
+        }
+
+        time_t endTime = SDL_GetTicks();
+        if (is_done) printf("Done raytracing! %ld\n", endTime-startTime);
+
+        return is_done;
     }
-    else {
-	if (num_samples >= packet_width_ray * packet_width_ray) {
-	    packet_width_pixel = 1;
-	    printf("pp: %ld; #s: %ld; wp: %ld\n", packet_width_pixel, num_samples, pixel_width);
-	    
-	    trace_small_packet(buffer, width, height);
-	    is_done = true;
-	}
-	else {
-	    // Recompute the unit amount of work
-	    // So a packet can perfectly cover a square area of pixels.
-	    size_t num_p = packet_width_ray * packet_width_ray / num_samples;
-	    packet_width_pixel = (uint32_t)(std::floor(std::sqrt(num_p)));
-
-	    // Given packet_width_ray is a power of 2, rounding the pixel width to next
-	    // power of 2 would make this value divisible (only when it's not a power of 2)
-	    if (packet_width_pixel & (packet_width_pixel - 1))
-		packet_width_pixel = nextPow2(packet_width_pixel);
-	    num_samples = packet_width_ray * packet_width_ray / (packet_width_pixel * packet_width_pixel);
-	    pixel_width /= packet_width_pixel;
-	    pixel_width *= packet_width_pixel;
-
-	    printf("#p: %ld; pp: %ld; #s: %ld; wp: %ld\n", num_p, packet_width_pixel, num_samples, pixel_width);
-
-	    trace_large_packet(buffer, width, height);
-	    is_done = true;
-	}
-
-    }
-
-    time_t endTime = SDL_GetTicks();
-    if (is_done) printf("Done raytracing! %ld\n", endTime-startTime);
-
-    return is_done;
-}
 
 } /* _462 */
