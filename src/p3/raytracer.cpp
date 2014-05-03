@@ -196,10 +196,9 @@ Vector3 Raytracer::get_viewing_ray(size_t x, size_t y) {
     return view_ray; // viewing ray direction
 }
 
-Packet Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height) {
+void Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height, Packet& packet) {
     real_t dx = real_t(1)/width;
     real_t dy = real_t(1)/height;
-    Packet packet(packet_width_ray * packet_width_ray);
     size_t x_min;
     size_t x_max;
     size_t y_min;
@@ -223,6 +222,15 @@ Packet Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height) 
 		real_t rand_j = real_t(2)*(real_t(cur_y)+random())*dy - real_t(1);
 
 		Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(rand_i, rand_j));
+
+		// TODO: a better way?
+		packet.e_x[count] = r.e[0];
+		packet.e_y[count] = r.e[1];
+		packet.e_z[count] = r.e[2];
+		packet.d_x[count] = r.d[0];
+		packet.d_y[count] = r.d[1];
+		packet.d_z[count] = r.d[2];
+
 		packet.rays[count++] = r;
 	    }
 	}
@@ -235,10 +243,7 @@ Packet Raytracer::build_packet(size_t x, size_t y, size_t width, size_t height) 
 
     build_frustum(packet.frustum, x_min, x_max, y_min, y_max);
 
-
     packet.size = packet_width_ray * packet_width_ray;
-
-    return packet;
 }
 
 void Raytracer::trace_small_packet(unsigned char* buffer,
@@ -269,7 +274,8 @@ void Raytracer::trace_small_packet(unsigned char* buffer,
 
 		// Shoot packet one by one to the same pixel
 		for (size_t i = 0; i < num_packet; i++) {
-		    Packet packet = build_packet(p_x, p_y, width, height);
+		    Packet packet(packet_width_ray * packet_width_ray);
+		    build_packet(p_x, p_y, width, height, packet);
 
 		    // Get color
 		    scene->getColors(packet, refractiveStack,
@@ -308,7 +314,8 @@ void Raytracer::trace_large_packet(unsigned char* buffer,
 		size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
 
 		// Clamped along the boundary.
-		Packet packet = build_packet(p_x, p_y, width, height);
+		Packet packet(packet_width_ray * packet_width_ray);
+		build_packet(p_x, p_y, width, height, packet);
 		
 		// Get color here. (func in scene)
 		Color3 packet_color[packet_width_pixel * packet_width_pixel * num_samples];

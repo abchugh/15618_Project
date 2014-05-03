@@ -700,7 +700,6 @@ finishUp:
 	    for (uint32_t i = active; i < packet.size; i++) {
 		t1_max = std::max(t1_max, t1s[i]);
 	    }
-	    
 
 	    uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
 

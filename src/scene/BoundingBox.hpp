@@ -8,6 +8,8 @@
 namespace _462 {
 class Ray;
 struct Frustum;
+struct Packet;
+
 class BoundingBox
 {
 public:
@@ -35,6 +37,9 @@ public:
 
     // Check against a frustum
     bool hit(const Frustum& frustum) const;
+
+    // Packet
+    void hit(const Packet& packet, int start, int end, float *t0, float *t1, char *result) const;
 
     int MaximumExtent()const;
     Vector3 lowCoord, highCoord;

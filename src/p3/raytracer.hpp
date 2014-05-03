@@ -51,7 +51,7 @@ private:
     void build_frustum(Frustum& frustum, real_t xmin, real_t xmax,
 		       real_t ymin, real_t ymax);
 
-    Packet build_packet(size_t x, size_t y, size_t width, size_t height);
+    void build_packet(size_t x, size_t y, size_t width, size_t height, Packet& packet);
 
     // when multiple packets inside one pixel
     void trace_small_packet(unsigned char* buffer,

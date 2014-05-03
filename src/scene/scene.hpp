@@ -18,9 +18,14 @@
 #include <string>
 #include <vector>
 #include <cfloat>
-
+#include <malloc.h>
+#include "xmmintrin.h"
+#include "emmintrin.h"
 
 namespace _462 {
+
+#define LANES 8
+
     struct hitRecord
     {
 	//direction of normal of the object where the ray hits
@@ -53,18 +58,43 @@ namespace _462 {
     struct Packet {
 	Frustum frustum;
 	Ray *rays;
+	
+	float *e_x;
+	float *e_y;
+	float *e_z;
+	float *d_x;
+	float *d_y;
+	float *d_z;
+
 	uint32_t size;
 	
 	Packet(size_t packet_size) {
 	    rays = new Ray[packet_size];
+	    
+	    e_x = (float*)memalign(16, sizeof(float) * packet_size);
+	    e_y = (float*)memalign(16, sizeof(float) * packet_size);
+	    e_z = (float*)memalign(16, sizeof(float) * packet_size);
+
+	    d_x = (float*)memalign(16, sizeof(float) * packet_size);
+	    d_y = (float*)memalign(16, sizeof(float) * packet_size);
+	    d_z = (float*)memalign(16, sizeof(float) * packet_size);
+
 	    size = packet_size;
 	}   
 
 	~Packet() {
-	    if (rays != NULL)
-		delete[] rays;
-	    rays = NULL;
+	    delete[] rays;
+	    free(e_x);
+	    free(e_y);
+	    free(e_z);
+	    free(d_x);
+	    free(d_y);
+	    free(d_z);
 	}
+
+    private:
+	Packet(const Packet& packet);
+	Packet& operator= (const Packet& packet);
     };
 
     class Geometry

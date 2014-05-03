@@ -106,7 +106,6 @@ bool BoundingBox::hit(const Frustum& frustum) const {
     Vector3 center = 0.5 * (lowCoord + highCoord);
     Vector3 extent = 0.5 * (highCoord - lowCoord);
     
-    
     for (int i = 0; i < 6; i++) {
 	
 	int x_sign = (-1 + 2 * (frustum.planes[i].norm.x >= 0));
@@ -123,9 +122,9 @@ bool BoundingBox::hit(const Frustum& frustum) const {
 	    return false;
 	}
 
-	n.x = (frustum.planes[i].norm.x < 0) ? highCoord.x : lowCoord.x;
-	n.y = (frustum.planes[i].norm.y < 0) ? highCoord.y : lowCoord.y;
-	n.z = (frustum.planes[i].norm.z < 0) ? highCoord.z : lowCoord.z;
+	n.x = center.x - x_sign * extent.x;
+	n.y = center.y - y_sign * extent.y;
+	n.z = center.z - z_sign * extent.z;
 
 	// n vertex is outside, given p vertex is inside
 	if (dot(n - frustum.planes[i].point, frustum.planes[i].norm)
@@ -135,6 +134,92 @@ bool BoundingBox::hit(const Frustum& frustum) const {
     }
     
     return true;
+}
+
+void BoundingBox::hit(const Packet& packet, int start, int end, float *t0, float *t1, char *result) const {
+    __m128 zeros = _mm_setzero_ps();
+    __m128 ones = _mm_set1_ps(1);
+    __m128i alltrue = _mm_set1_epi32(0xffffffff);
+    __m128i local;
+
+    // Handle the boundary condition by allocating result with size divisible
+    for (int i = start; i < end; i += LANES) {
+	__m128 d_x = _mm_load_ps(packet.d_x + i);
+	__m128 d_y = _mm_load_ps(packet.d_y + i);
+
+	__m128 invDir_x = _mm_rcp_ps(d_x);
+	__m128 invDir_y = _mm_rcp_ps(d_y);
+
+	__m128 dirIsNeg_x = _mm_and_ps(_mm_cmplt_ps(zeros, invDir_x), ones);
+	__m128 dirIsNeg_y = _mm_and_ps(_mm_cmplt_ps(zeros, invDir_y), ones);
+	__m128 e_x = _mm_load_ps(packet.e_x + i);
+	__m128 e_y = _mm_load_ps(packet.e_y + i);
+
+	__m128 tmin = _mm_mul_ps(_mm_sub_ps(dirIsNeg_x, e_x), invDir_x);
+	__m128 tmax = _mm_mul_ps(_mm_sub_ps(_mm_sub_ps(ones, dirIsNeg_x), e_x),
+				 invDir_x);
+
+	__m128 tymin = _mm_mul_ps(_mm_sub_ps(dirIsNeg_y, e_y), invDir_y);
+	__m128 tymax = _mm_mul_ps(_mm_sub_ps(_mm_sub_ps(ones, dirIsNeg_y), e_y),
+				 invDir_y);
+
+	local = _mm_castps_si128(_mm_or_ps(_mm_cmpgt_ps(tmin, tymax), _mm_cmpgt_ps(tymin, tmax)));
+
+	int count_zero = _mm_movemask_epi8(local);
+	if (count_zero == 0) {
+	    _mm_maskmoveu_si128(local, alltrue, result + i);
+	    continue;
+	}
+
+	__m128 cmptemp = _mm_cmpgt_ps(tymin, tmin);
+
+	tmin = _mm_add_ps(_mm_and_ps(cmptemp, tymin),
+			  _mm_and_ps(_mm_xor_ps(cmptemp, (__m128)alltrue), tmin));
+	cmptemp = _mm_cmplt_ps(tymax, tmax);
+	tmax = _mm_add_ps(_mm_and_ps(cmptemp, tymax),
+			  _mm_and_ps(_mm_xor_ps(cmptemp, (__m128)alltrue), tmax));
+
+	// Check for z-axis
+	__m128 d_z = _mm_load_ps(packet.d_z + i);
+	__m128 invDir_z = _mm_rcp_ps(d_z);
+	__m128 dirIsNeg_z = _mm_and_ps(_mm_cmplt_ps(zeros, invDir_z), ones);
+	__m128 e_z = _mm_load_ps(packet.e_z + i);
+
+	__m128 tzmin = _mm_mul_ps(_mm_sub_ps(dirIsNeg_z, e_z), invDir_z);
+	__m128 tzmax = _mm_mul_ps(_mm_sub_ps(_mm_sub_ps(ones, dirIsNeg_z), e_z),
+				 invDir_z);
+	__m128i localz = _mm_castps_si128(_mm_or_ps(_mm_cmpgt_ps(tmin, tzmax), _mm_cmpgt_ps(tzmin, tmax)));
+	local = _mm_or_si128(localz, local);
+
+	count_zero = _mm_movemask_epi8(local);
+	if (count_zero == 0) {
+	    _mm_maskmoveu_si128(local, alltrue, result + i);
+	    continue;
+	}
+	
+	cmptemp = _mm_cmpgt_ps(tzmin, tmin);
+	tmin = _mm_add_ps(_mm_and_ps(cmptemp, tzmin),
+			  _mm_and_ps(_mm_xor_ps(cmptemp, (__m128)alltrue), tmin));
+	cmptemp = _mm_cmplt_ps(tzmax, tmax);
+	tmax = _mm_add_ps(_mm_and_ps(cmptemp, tzmax),
+			  _mm_and_ps(_mm_xor_ps(cmptemp, (__m128)alltrue), tmax));
+
+	__m128 t0_local = _mm_load_ps(t0 + i);
+	__m128 t1_local = _mm_load_ps(t1 + i);
+
+	localz = _mm_castps_si128(_mm_or_ps(_mm_cmpgt_ps(tmin, t1_local), _mm_cmpgt_ps(t0_local, tmax)));
+	local = _mm_or_si128(localz, local);
+
+	count_zero = _mm_movemask_epi8(local);
+	if (count_zero == 0) {
+	    _mm_maskmoveu_si128(local, alltrue, result + i);
+	    continue;
+	}
+
+	__m128 threshold = _mm_set1_ps(1e-5);
+	localz = _mm_castps_si128(_mm_cmple_ps(tmin, _mm_add_ps(tmax, threshold)));
+	_mm_maskmoveu_si128(local, alltrue, result + i);
+    }
 }
 
 bool BoundingBox::hit(const Vector3& invDir, const Vector3& origin, real_t t0, real_t t1, const uint32_t dirIsNeg[3])const
