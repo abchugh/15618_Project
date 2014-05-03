@@ -130,7 +130,7 @@ void Triangle::InitGeometry()
 		bb.AddPoint(project(mat*Vector4(vertices[i].position,1)));
 }
 
-bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1,hitRecord& h, bool fullRecord) const
+bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const
 {
 	if(!checkBoundingBoxHit(r,t0,t1))
 		return false;
@@ -164,7 +164,7 @@ bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1,hitRecord& h, 
 
 	h.n = Vector3(0,0,0);
 	for(int i=0;i<3;i++)
-		h.n += mult[i]*vertices[i].normal;
+	    h.n += mult[i]*vertices[i].normal;
 	h.n = normalize( normMat*h.n);
 
 	
