@@ -16,10 +16,12 @@
 #include <algorithm>
 #include <random>
 #include <time.h>
-
+#include <vector>
 #ifdef OPENMP // just a defense in case OpenMP is not installed.
 
 #include <omp.h>
+
+using namespace std;
 
 #endif
 namespace _462 {
@@ -258,7 +260,7 @@ void Raytracer::trace_small_packet(unsigned char* buffer,
     refractiveStack.push_back(scene->refractive_index);
 
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-    for (size_t work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+    for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
 	size_t cur_work_y = work_count / work_num_x;
 	size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
@@ -270,7 +272,7 @@ void Raytracer::trace_small_packet(unsigned char* buffer,
 		    continue;
 
 		Color3 cur_color = Color3::Black();
-		Color3 packet_color[packet_ray_size];
+		vector<Color3> packet_color(packet_ray_size);
 
 		// Shoot packet one by one to the same pixel
 		for (size_t i = 0; i < num_packet; i++) {
@@ -303,7 +305,7 @@ void Raytracer::trace_large_packet(unsigned char* buffer,
 
     // Work should be balanced automatically.
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-    for (size_t work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+    for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
 	size_t cur_work_y = work_count / work_num_x;
 	size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
@@ -318,7 +320,7 @@ void Raytracer::trace_large_packet(unsigned char* buffer,
 		build_packet(p_x, p_y, width, height, packet);
 		
 		// Get color here. (func in scene)
-		Color3 packet_color[packet_width_pixel * packet_width_pixel * num_samples];
+		vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
 		
 		scene->getColors(packet, refractiveStack,
 				 packet_color);

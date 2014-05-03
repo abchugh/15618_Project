@@ -95,71 +95,7 @@ namespace _462 {
         uint8_t pad[2];       // ensure 32 byte total size
     };
 
-    struct JobQueueList {
-        int size;
-        std::deque<queueData> q[MAX_THREADS];
-        int lock[MAX_THREADS];
-        
-	JobQueueList() {
-	    std::fill(lock, lock + MAX_THREADS, 0);
-	}
-
-	inline void lockQueue(int index) {
-	    while (__sync_lock_test_and_set(&lock[index], 1)) ;
-	}
-
-	inline void releaseQueue(int index) {
-	    __sync_lock_release(&lock[index]);
-	}
-
-	void addJob(queueData data, int index) {
-	    lockQueue(index);
-	    q[index].push_front(data);
-	    releaseQueue(index);
-	}
-
-	queueData fetchJob(int index) {
-	    queueData job;
-	    job.start = 1;
-	    job.end = 0;
-
-	    lockQueue(index);
-	    if (q[index].size() > 0) {
-		job = q[index].front();
-		q[index].pop_front();
-	    }
-
-	    releaseQueue(index);
-
-	    return job;
-	}
-
-	int getJobNumber() {
-	    int jobNum = 0;
-	    for (int i = 0; i < size; i++)
-		jobNum += q[i].size();
-	    return jobNum;
-	}
-
-	queueData tryStealJob() {
-	    queueData job;
-	    job.start = 1;
-	    job.end = 0;
-
-	    int coin = rand() % size;
-
-	    if (q[coin].size() > 0) {
-		lockQueue(coin);
-		if (q[coin].size() > 0) {
-		    job = q[coin].back();
-		    q[coin].pop_back();
-		}
-		releaseQueue(coin);
-	    }
-		
-	    return job;
-	}
-    };
+    
 
     struct TraversalNode {
 	uint32_t node_index;
@@ -196,7 +132,7 @@ namespace _462 {
 
 	void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
-	void traverse(const Packet& packet, hitRecord *records, const real_t t0, const real_t t1) const;
+	void traverse(const Packet& packet, std::vector<hitRecord>& records, const real_t t0, const real_t t1) const;
 
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
@@ -216,7 +152,6 @@ namespace _462 {
         std::vector<Geometry*> primitives;
         LinearBVHNode *nodes;
         BVHBuildNode *root;
-	JobQueueList jobQueueList;
         std::priority_queue<queueData> pq;
         std::deque<queueData> q[MAX_THREADS];
 

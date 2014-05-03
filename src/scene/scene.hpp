@@ -23,7 +23,11 @@
 #include "emmintrin.h"
 
 namespace _462 {
-
+#ifdef _WINDOWS
+    #define memalign(a,b) _aligned_malloc((b),(a))
+#else
+    #define _aligned_free(a) free((a))
+#endif
 #define LANES 8
 
     struct hitRecord
@@ -84,12 +88,13 @@ namespace _462 {
 
 	~Packet() {
 	    delete[] rays;
-	    free(e_x);
-	    free(e_y);
-	    free(e_z);
-	    free(d_x);
-	    free(d_y);
-	    free(d_z);
+
+        _aligned_free(e_x);
+	    _aligned_free(e_y);
+	    _aligned_free(e_z);
+	    _aligned_free(d_x);
+	    _aligned_free(d_y);
+	    _aligned_free(d_z);
 	}
 
     private:
@@ -200,7 +205,7 @@ namespace _462 {
 	void add_light( const SphereLight& l );
 	static const int maxRecursionDepth;
 	Color3 getColor(const Ray& r, std::vector<real_t> refractiveStack, hitRecord& h, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
-	void getColors(const Packet& packet, std::vector<real_t> refractiveStack, Color3 *colors, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
+	void getColors(const Packet& packet, std::vector<real_t> refractiveStack, std::vector<Color3>& colors, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
 
 	bool hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
 	Color3 calculateDiffuseColor(Vector3 p, Vector3 n, Color3 kd)const;

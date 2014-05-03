@@ -3,8 +3,11 @@
 
 #include <iterator>
 #include <cstring>
-#include "parallel/partition.h"
 #include "scene/scene.hpp"
+
+#ifndef _WINDOWS
+    #include "parallel/partition.h"
+#endif
 
 using namespace std;
 namespace _462 {
@@ -56,31 +59,34 @@ namespace _462 {
         return b <= splitBucket;
     }
     unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer) {
-	int result;
-	int num_threads = omp_get_max_threads();
+	    int result;
+#ifndef _WINDOWS
+	    int num_threads = omp_get_max_threads();
 
-	if (end - start > 2000) {
-	    std::iterator_traits<PrimitiveInfo*>::difference_type pMid = 
-		__gnu_parallel::__parallel_partition(&buildData[start],
-						     &buildData[end], CompareToVal(dim, mid), 12);
-	    result = pMid + start;
-	}
-	else {
-	    PrimitiveInfo* pMid = std::partition(&buildData[start], &buildData[end-1]+1, CompareToVal(dim, mid));
-	    result = pMid - &buildData[0];
-	}
+	    if (end - start > 2000) {
+	        std::iterator_traits<PrimitiveInfo*>::difference_type pMid = 
+		    __gnu_parallel::__parallel_partition(&buildData[start],
+						         &buildData[end], CompareToVal(dim, mid), 12);
+	        result = pMid + start;
+	    }
+	    else 
+#endif
+        {
+	        PrimitiveInfo* pMid = std::partition(&buildData[start], &buildData[end-1]+1, CompareToVal(dim, mid));
+	        result = pMid - &buildData[0];
+	    }
 
-	return result;
+	    return result;
     }
 
-    template<typename ISPC_T, typename MATH_T, int Dim = 3>
+    template<typename ISPC_T, typename MATH_T, int Dim>
     void to_ispc_vector(ISPC_T &ispc_v, MATH_T v) {
 	for (int i = 0; i < Dim; i++) {
 	    ispc_v.v[i] = v[i];
 	}
     }
 
-    template<typename ISPC_T, typename MATH_T, int Dim = 3>
+    template<typename ISPC_T, typename MATH_T, int Dim>
     void to_math_vector(MATH_T &v, ISPC_T ispc_v) {
 	for (int i = 0; i < Dim; i++) {
 	    v[i] = ispc_v.v[i];
@@ -92,25 +98,25 @@ namespace _462 {
         list.resize(primitives.size());
         if(!allocateOnly)
             #pragma omp parallel for 
-	    for (uint32_t i = 0; i < primitives.size(); ++i) {
-		#ifndef ISPC_AOS
-		list[i] = PrimitiveInfo(i, primitives[i]->bb);
-		#else
+	        for (int i = 0; i < primitives.size(); ++i) {
+		        #ifndef ISPC_AOS
+		        list[i] = PrimitiveInfo(i, primitives[i]->bb);
+		        #else
 		
-		float packed_num;
-		memcpy(&packed_num, &i, sizeof(int));
-		Vector4 low_num(primitives[i]->bb.lowCoord, packed_num);
-		Vector4 high(primitives[i]->bb.highCoord, 0.f);
-		Vector4 centroid(.5f * primitives[i]->bb.lowCoord +
-				 .5f * primitives[i]->bb.highCoord, 0);
+		        float packed_num;
+		        memcpy(&packed_num, &i, sizeof(int));
+		        Vector4 low_num(primitives[i]->bb.lowCoord, packed_num);
+		        Vector4 high(primitives[i]->bb.highCoord, 0.f);
+		        Vector4 centroid(.5f * primitives[i]->bb.lowCoord +
+				         .5f * primitives[i]->bb.highCoord, 0);
 
-		to_ispc_vector<ispc::float4, Vector4, 4>(list[i].lowCoord, low_num);
-		to_ispc_vector<ispc::float4, Vector4, 4>(list[i].highCoord, -high);
-		to_ispc_vector<ispc::float4, Vector4, 4>(list[i].centroid, centroid);
-		to_ispc_vector<ispc::float4, Vector4, 4>(list[i].negCentroid, -centroid);
+		        to_ispc_vector<ispc::float4, Vector4, 4>(list[i].lowCoord, low_num);
+		        to_ispc_vector<ispc::float4, Vector4, 4>(list[i].highCoord, -high);
+		        to_ispc_vector<ispc::float4, Vector4, 4>(list[i].centroid, centroid);
+		        to_ispc_vector<ispc::float4, Vector4, 4>(list[i].negCentroid, -centroid);
 		
-		#endif
-	    }
+		        #endif
+	        }
 		
     }
     
