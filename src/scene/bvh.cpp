@@ -674,7 +674,7 @@ finishUp:
 	return packet.size;
     }
 
-    void BVHAccel::traverse(const Packet& packet, hitRecord *records, 
+    void BVHAccel::traverse(const Packet& packet, vector<hitRecord>& records, 
 			    const real_t t0, const real_t t1) const {
 	if(!nodes)
 	    return ;
@@ -683,13 +683,13 @@ finishUp:
 	uint32_t nodeNum = 0;
 	uint32_t active = 0;
 	// t0s are all the same?
-	real_t t0s[packet.size];
-	real_t t1s[packet.size];
+	vector<real_t> t0s(packet.size);
+	vector<real_t> t1s(packet.size);
         uint32_t dirIsNeg[3];
 	real_t t1_max = t1;
 
-	std::fill(t0s, t0s + packet.size, t0);
-	std::fill(t1s, t1s + packet.size, t1);
+    std::fill(t0s.begin(), t0s.end(), t0);
+    std::fill(t1s.begin(), t1s.end(), t1);
 	
 	hitRecord h1;
 	while (true) {

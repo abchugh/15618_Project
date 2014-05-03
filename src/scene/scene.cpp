@@ -10,7 +10,8 @@
 #include "math/random462.hpp"
 #include <algorithm>
 #include "scene/model.hpp"
-
+#include <vector>
+using namespace std;
 namespace _462 {
 
 const real_t SLOP = 1e-5;
@@ -252,8 +253,8 @@ void Scene::TransformModels(real_t translate, const Vector3 rotate)
 	}
 }
 
-void Scene::getColors(const Packet& packet, std::vector<real_t> refractiveStack, Color3 *colors, int depth, real_t t0, real_t t1) const {
-    hitRecord records[packet.size];
+void Scene::getColors(const Packet& packet, std::vector<real_t> refractiveStack, std::vector<Color3>& colors, int depth, real_t t0, real_t t1) const {
+    vector<hitRecord> records(packet.size);
 
     tree->traverse(packet, records, t0, t1);
 

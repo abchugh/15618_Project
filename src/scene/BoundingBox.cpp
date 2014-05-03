@@ -137,6 +137,7 @@ bool BoundingBox::hit(const Frustum& frustum) const {
 }
 
 void BoundingBox::hit(const Packet& packet, int start, int end, float *t0, float *t1, char *result) const {
+    /*
     __m128 zeros = _mm_setzero_ps();
     __m128 ones = _mm_set1_ps(1);
     __m128i alltrue = _mm_set1_epi32(0xffffffff);
@@ -220,6 +221,7 @@ void BoundingBox::hit(const Packet& packet, int start, int end, float *t0, float
 	localz = _mm_castps_si128(_mm_cmple_ps(tmin, _mm_add_ps(tmax, threshold)));
 	_mm_maskmoveu_si128(local, alltrue, result + i);
     }
+    */
 }
 
 bool BoundingBox::hit(const Vector3& invDir, const Vector3& origin, real_t t0, real_t t1, const uint32_t dirIsNeg[3])const
