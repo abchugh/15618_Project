@@ -3,6 +3,7 @@
 
 #include "math/vector.hpp"
 #include "partition_ispc.h"
+#include "hit_ispc.h"
 #include "ispc_switch.h"
 
 #include <cstdlib>
