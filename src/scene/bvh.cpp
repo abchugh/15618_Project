@@ -10,24 +10,7 @@
 using namespace std;
 
 namespace _462 {
-#ifndef ISPC_SOA
-    struct CompareToVal {
-        CompareToVal(int d, float v) { dim = d; val = v; }
-        int dim;
-        float val;
-        bool operator()(const PrimitiveInfo &a) const {
-	    #ifdef ISPC_AOS
-            return a.centroid.v[dim] < val;
-	    #else
-	    return a.centroid[dim] < val;
-	    #endif
-        }
-    };
-#endif
 
-    PrimitiveInfoList buildDataBuffer;
-
-    //#define ENABLED_TIME_LOGS
 #ifdef ENABLED_TIME_LOGS
     time_t t1[MAX_THREADS], t2[MAX_THREADS], t3[MAX_THREADS], t4[MAX_THREADS], t5[MAX_THREADS], t6[MAX_THREADS], t7[MAX_THREADS], t8[MAX_THREADS], tP[MAX_THREADS];
 
@@ -77,7 +60,7 @@ namespace _462 {
     float getCentroidDim(const PrimitiveInfoList& buildData, int index, int dim);
     uint32_t SplitEqually(PrimitiveInfoList& buildData, uint32_t start, uint32_t end, uint32_t dim);
     void clearList(PrimitiveInfoList& buildData);
-    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData, PrimitiveInfoList& buildDataBuffer);
+    unsigned int partition(int start, int end, int dim, float mid, PrimitiveInfoList& buildData);
     
 
     bool queueData::updateStatus(queueData& data)
@@ -106,9 +89,6 @@ namespace _462 {
         // Initialize _buildData_ array for primitives
         PrimitiveInfoList buildData;
         initPrimitiveInfoList(primitives, buildData);
-#ifdef ISPC_SOA
-        initPrimitiveInfoList(primitives, buildDataBuffer, true);
-#endif
 	
         uint32_t totalNodes = 0;
         vector< Geometry* > orderedPrims(primitives.size());
@@ -239,7 +219,6 @@ namespace _462 {
         assert(offset == totalNodes);
         endTime = SDL_GetTicks();
 
-        clearList(buildDataBuffer);
         clearList(buildData);
 
         printf("Done Building BVH at %ld \n", endTime-startTime);
@@ -394,7 +373,7 @@ namespace _462 {
 		    if (nPrimitives > maxPrimsInNode || minCost < nPrimitives) {
                             
 			float bmid = (minCostSplit + 1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
-			mid = partition(start, end, dim, bmid, buildData, buildDataBuffer);
+			mid = partition(start, end, dim, bmid, buildData);
 
 
 			/*if (start == mid || mid == end)
@@ -598,7 +577,7 @@ finishUp:
                 minCost < nPrimitives) {
                     
                     float bmid = (minCostSplit+1) * centroidBounds.extent(dim) / nBuckets + centroidBounds.lowCoord[dim];
-                    mid = partition(start, end, dim, bmid, buildData, buildDataBuffer);
+                    mid = partition(start, end, dim, bmid, buildData);
             }
 
 
