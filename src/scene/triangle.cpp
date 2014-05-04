@@ -139,12 +139,13 @@ bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h,
 	real_t mult[3];
 	Vector3 position[] = { vertices[0].position, vertices[1].position, vertices[2].position };
 	const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
-	if(!getBarycentricCoordinates(tRay,h.t,mult,position))
+    real_t t;
+	if(!getBarycentricCoordinates(tRay,t,mult,position))
 		return false;
 
-	if(h.t<t0 || h.t>t1)
+	if(t<t0 || t>t1)
 		return false;
-
+    h.t = t;
 	if(!fullRecord)
 		return true;	
 	

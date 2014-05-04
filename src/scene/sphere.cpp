@@ -127,13 +127,13 @@ bool Sphere::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord & h, 
 	    return false;
 	else
 	{
-	    h.t = (-B -sqrt(D) )/ (2 * A);
-	    if(h.t<t0)
-		h.t = (-B + sqrt(D) )/ (2 * A);
+        real_t t = (-B -sqrt(D) )/ (2 * A);
+	    if(t<t0)
+		    t = (-B + sqrt(D) )/ (2 * A);
 		
-	    if(h.t<t0 || h.t>t1)
-		return false;
-
+	    if(t<t0 || t>t1)
+		    return false;
+        h.t = t;
 	    if(fullRecord)
 		{
 			Vector3 p = e + h.t*d;

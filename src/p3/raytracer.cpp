@@ -17,15 +17,25 @@
 #include <random>
 #include <time.h>
 #include <vector>
-#ifdef OPENMP // just a defense in case OpenMP is not installed.
-
 #include <omp.h>
 
 using namespace std;
 
-#endif
 namespace _462 {
-
+    extern time_t ta[MAX_THREADS], tb[MAX_THREADS];
+    time_t tc[MAX_THREADS],td[MAX_THREADS],te[MAX_THREADS],tf[MAX_THREADS];
+    static time_t sum(time_t arr[])
+    {
+        time_t sum = 0;
+        for(int i=0;i<MAX_THREADS;i++)
+            sum+=arr[i];
+        return sum;
+    }
+    static void reset()
+    {
+        for(int i=0;i<MAX_THREADS;i++)
+            ta[i] = tb[i] = tc[i] = td[i] = te[i] = tf[i] = 0;
+    }
     // max number of threads OpenMP can use. Change this if you like.
 #define MAX_THREADS 8
 
@@ -295,50 +305,73 @@ namespace _462 {
     }
 
     void Raytracer::trace_large_packet(unsigned char* buffer, size_t width, size_t height) {
-
-            size_t work_num_x = (width + pixel_width - 1) / pixel_width;
-            size_t work_num_y = (height + pixel_width - 1) / pixel_width;
-            std::vector<real_t> refractiveStack;
-            refractiveStack.push_back(scene->refractive_index);
-
-            // Work should be balanced automatically.
+        size_t work_num_x = (width + pixel_width - 1) / pixel_width;
+        size_t work_num_y = (height + pixel_width - 1) / pixel_width;
+        std::vector<real_t> refractiveStack;
+        refractiveStack.push_back(scene->refractive_index);
+        reset();
+        time_t start = SDL_GetTicks();
+        // Work should be balanced automatically.
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-            for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
-                size_t cur_work_y = work_count / work_num_x;
-                size_t cur_work_x = work_count - cur_work_y * work_num_x;
+        for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
+            size_t cur_work_y = work_count / work_num_x;
+            size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
-                // All numbers should have been rounded
-                for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
-                    for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
-                        size_t p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
-                        size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
+            // All numbers should have been rounded
+            for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
+                for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
 
-                        // Clamped along the boundary.
-                        Packet packet(packet_width_ray * packet_width_ray);
-                        build_packet(p_x, p_y, width, height, packet);
+                    time_t tt = SDL_GetTicks();
 
-                        // Get color here. (func in scene)
-                        vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
+                    size_t p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
+                    size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
 
-                        scene->getColors(packet, refractiveStack,packet_color);
+                    // Clamped along the boundary.
+                    Packet packet(packet_width_ray * packet_width_ray);
+                    build_packet(p_x, p_y, width, height, packet);
 
-                        for (size_t y = 0; y < packet_width_pixel; y++) {
-                            for (size_t x = 0; x < packet_width_pixel; x++) {
-                                Color3 cur_color = Color3::Black();
-                                if ((p_x + x) >= width || (p_y + y) >= height)
-                                    continue;
 
-                                for (size_t count = 0; count < num_samples; count++) 
-                                    cur_color += packet_color[y * packet_width_pixel * num_samples +
-                                    x * num_samples + count];
+                    tc[omp_get_thread_num()] += SDL_GetTicks() -tt;
 
-                                cur_color = cur_color*(real_t(1)/num_samples);
-                                cur_color.to_array(&buffer[4 * ((p_y + y) * width + p_x + x)]);
-                            }
+                    // Get color here. (func in scene)
+                    vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
+                    scene->getColors(packet, refractiveStack,packet_color);
+
+                    td[omp_get_thread_num()] += SDL_GetTicks() -tt;
+                    for (size_t y = 0; y < packet_width_pixel; y++) {
+                        for (size_t x = 0; x < packet_width_pixel; x++) {
+                            Color3 cur_color = Color3::Black();
+                            if ((p_x + x) >= width || (p_y + y) >= height)
+                                continue;
+
+                            for (size_t count = 0; count < num_samples; count++) 
+                                cur_color += packet_color[y * packet_width_pixel * num_samples +
+                                x * num_samples + count];
+
+                            cur_color = cur_color*(real_t(1)/num_samples);
+                            cur_color.to_array(&buffer[4 * ((p_y + y) * width + p_x + x)]);
                         }
                     }
+
+                    te[omp_get_thread_num()] += SDL_GetTicks() -tt;
                 }
             }
+        }
+        for(int i=0;i<20;i++)
+        {
+            if(ta[i]==0) break;
+            printf("%d ", ta[i]);
+        }
+        printf("\n");
+        for(int i=0;i<20;i++)
+        {
+            if(tb[i]==0) break;
+            printf("%d ", tb[i]-ta[i]);
+        }
+        printf("\n");
+
+        time_t end = SDL_GetTicks();
+        printf("ta tb... = %d %d %d \n", sum(ta), sum(tb)-sum(ta), sum(tc));//sum(td)-sum(tc) = tb), sum(te)-sum(td) negligible
     }
 
 

@@ -7,6 +7,7 @@
 
 #include <map>
 
+#define printf(...) 
 using namespace std;
 
 namespace _462 {
@@ -265,6 +266,7 @@ namespace _462 {
         uint32_t end, uint32_t *totalNodes, vector<Geometry* > &orderedPrims, BVHBuildNode *parent, bool firstChild){
             assert(start != end);
             GetTime(startTime);
+            //printf("%d %d\n", start, end);
 
 #pragma omp atomic
             (*totalNodes)++;
@@ -661,14 +663,12 @@ finishUp:
             uint32_t todoOffset = 0;
             uint32_t nodeNum = 0;
             uint32_t active = 0;
-            // t0s are all the same?
-            vector<real_t> t0s(packet.size);
-            vector<real_t> t1s(packet.size);
+
             uint32_t dirIsNeg[3];
             real_t t1_max = t1;
 
-            std::fill(t0s.begin(), t0s.end(), t0);
-            std::fill(t1s.begin(), t1s.end(), t1);
+            for (uint32_t i = 0; i < packet.size; i++)
+                records[i].t = t1*2;
 
             hitRecord h1;
             while (true) {
@@ -677,7 +677,7 @@ finishUp:
                 // TODO: a better way to get t1_max? Or do we actually need this?
 
                 for (uint32_t i = active; i < packet.size; i++) {
-                    t1_max = std::max(t1_max, t1s[i]);
+                    t1_max = std::max(t1_max, records[i].t);
                 }
 
                 uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
@@ -705,11 +705,8 @@ finishUp:
                         for (uint32_t i = active; i < packet.size; i++) {
                             for (uint32_t j = 0; j < node->nPrimitives; j++) {
                                 // Use full record, since we still don't know how to deal with shadow ray (yet).
-                                if (primitives[node->primitivesOffset + j]->
-                                    hit(packet.rays[i], t0s[i], t1s[i], records[i], true)) {
-                                        if (t1s[i] > records[i].t)
-                                            t1s[i] = records[i].t;
-                                }
+
+                                primitives[node->primitivesOffset + j]->hit(packet.rays[i], t0, records[i].t, records[i], true);
                             }
                         }
 
