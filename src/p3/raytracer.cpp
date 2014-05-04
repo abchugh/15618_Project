@@ -60,9 +60,24 @@ namespace _462 {
         : scene(0), width(0), height(0) { }
 
     // random real_t in [0, 1)
+	static unsigned long _xR=123456789, _yR =362436069, _zR=521288629;
+
+	unsigned long xorshf96(void) {          //period 2^96-1
+	unsigned long t;
+		_xR ^= _xR << 16;
+		_xR ^= _xR >> 5;
+		_xR ^= _xR << 1;
+
+	   t = _xR;
+	   _xR = _yR;
+	   _yR = _zR;
+	   _zR = t ^ _xR ^ _yR;
+
+	  return _zR;
+	}
     static inline real_t random()
     {
-        return real_t(rand())/RAND_MAX;
+        return (real_t) xorshf96()/(float)(~0UL);
     }
 
     Raytracer::~Raytracer() { }

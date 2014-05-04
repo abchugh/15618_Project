@@ -144,7 +144,10 @@ namespace _462 {
             uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
 
-        uint32_t getFirstHit(const Packet& packet, const BoundingBox box, uint32_t active, 
+        uint32_t getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active, 
+            uint32_t *dirIsNeg, real_t t0, real_t t1) const;
+
+        uint32_t getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active, 
             uint32_t *dirIsNeg, real_t t0, real_t t1) const;
 
         uint32_t maxPrimsInNode;

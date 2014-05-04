@@ -629,7 +629,7 @@ finishUp:
         return myOffset;
     }
 
-    uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox box, uint32_t active,
+    uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active,
         uint32_t *dirIsNeg, real_t t0, real_t t1) const {
             Ray active_ray = packet.rays[active];
             Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
@@ -655,6 +655,27 @@ finishUp:
             return packet.size;
     }
 
+	uint32_t BVHAccel::getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active,
+        uint32_t *dirIsNeg, real_t t0, real_t t1) const {
+            Ray active_ray = packet.rays[active];
+            Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
+            dirIsNeg[0] = invDir.x < 0;
+            dirIsNeg[1] = invDir.y < 0;
+            dirIsNeg[2] = invDir.z < 0;
+
+            for (uint32_t i = packet.size - 1; i > active; i--) {
+                Ray cur_ray = packet.rays[i];
+                Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
+                dirIsNeg[0] = invDir.x < 0;
+                dirIsNeg[1] = invDir.y < 0;
+                dirIsNeg[2] = invDir.z < 0;
+
+                if (box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
+                    return i+1;
+            }
+
+            return active+1;
+    }
     void BVHAccel::traverse(const Packet& packet, vector<hitRecord>& records, 
         const real_t t0, const real_t t1) const {
             if(!nodes)
@@ -682,6 +703,7 @@ finishUp:
 
                 uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
 
+
                 if (cur_active < packet.size) {
                     if (node->nPrimitives == 0) {
                         int todo_index;
@@ -702,10 +724,10 @@ finishUp:
                     else {
                         // TODO: SIMDize by rewriting hit function
                         // Better to use large packet.
-                        for (uint32_t i = active; i < packet.size; i++) {
+                        uint32_t lastActive = getLastHit(packet, node->bounds, active, dirIsNeg, t0, t1_max);
+                        for (uint32_t i = active; i < lastActive; i++) {
                             for (uint32_t j = 0; j < node->nPrimitives; j++) {
                                 // Use full record, since we still don't know how to deal with shadow ray (yet).
-
                                 primitives[node->primitivesOffset + j]->hit(packet.rays[i], t0, records[i].t, records[i], true);
                             }
                         }

@@ -132,8 +132,8 @@ void Triangle::InitGeometry()
 
 bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const
 {
-	if(!checkBoundingBoxHit(r,t0,t1))
-		return false;
+//	if(!checkBoundingBoxHit(r,t0,t1))
+	//	return false;
 
 	Ray tRay = r.transform(invMat);
 	real_t mult[3];
