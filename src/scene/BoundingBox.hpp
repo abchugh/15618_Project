@@ -43,7 +43,13 @@ public:
 
     int MaximumExtent()const;
     Vector3 lowCoord, highCoord;
-    real_t SurfaceArea()const;
+    inline real_t SurfaceArea() {
+	float extent0 = extent(0);
+	float extent1 = extent(1);
+	float extent2 = extent(2);
+	float surfaceArea = 2*(extent0*extent1 + extent0*extent2 + extent1*extent2 );
+	return surfaceArea;
+    }
     
     const Vector3& operator[](int v) const
     {
@@ -60,6 +66,9 @@ public:
     {
         return 0.5f*lowCoord + 0.5f*highCoord;
     }
+
+private:
+    //float surfaceArea;
 };
 }
 #endif

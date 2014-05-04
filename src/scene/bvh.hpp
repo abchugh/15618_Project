@@ -14,7 +14,7 @@
 #include "scene/BoundingBox.hpp"
 namespace _462 {
 
-    //#undef ISPC
+#define CENTROID_BASED
 #define NUM_IN_PRE_QUEUE 7
     //#define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
@@ -63,6 +63,7 @@ namespace _462 {
     {
         uint32_t start, end;
         BVHBuildNode* parent;
+	BoundingBox box;
         bool isFirstChild;
 
         char* status;//when in both q and pq-> 1-use and dont delete, 0 don't use and delete,   when only in one of q and pq-> 2-use and delete
@@ -95,8 +96,6 @@ namespace _462 {
         uint8_t axis;         // interior node: xyz
         uint8_t pad[2];       // ensure 32 byte total size
     };
-
-
 
     struct TraversalNode {
         uint32_t node_index;
@@ -137,8 +136,11 @@ namespace _462 {
 
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
-            uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
+				     BoundingBox *boxPtr, uint32_t *totalNodes,
+				     std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL,
+				     bool firstChild = true);
         BVHBuildNode *fastRecursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
+					 BoundingBox *boxPtr, 
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
         void buildLeaf(PrimitiveInfoList &buildData, uint32_t start,
             uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);

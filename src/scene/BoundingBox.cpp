@@ -6,6 +6,7 @@
 namespace _462 {
 BoundingBox::BoundingBox():lowCoord(BIG_NUMBER,BIG_NUMBER,BIG_NUMBER), highCoord(-BIG_NUMBER,-BIG_NUMBER,-BIG_NUMBER)
 {
+    //surfaceArea = -1;
 }
 void BoundingBox::AddPoint(Vector3 point)
 {
@@ -56,10 +57,6 @@ void BoundingBox::AddBox(const ispc::BVHPrimitiveInfoList& list, int index)
 }
 #endif
 
-real_t BoundingBox::SurfaceArea()const
-{
-    return 2*(extent(0)*extent(1) + extent(0)*extent(2) + extent(1)*extent(2) ); 
-}
 int BoundingBox::MaximumExtent()const
 {
     if( extent(0) > extent(1))
