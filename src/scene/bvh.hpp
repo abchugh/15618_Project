@@ -16,7 +16,7 @@ namespace _462 {
 
 #define CENTROID_BASED
 #define NUM_IN_PRE_QUEUE 7
-    //#define ENABLED_TIME_LOGS
+    #define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
 
     class Geometry;

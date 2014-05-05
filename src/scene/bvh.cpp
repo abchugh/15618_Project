@@ -121,7 +121,7 @@ namespace _462 {
         printf("Started parallel tree phase  at %ld \n", endTime-startTime);
         time_t busy[MAX_THREADS] = {0}, idle[MAX_THREADS] = {0}, idleX[MAX_THREADS] = {0};
 #ifdef ENABLED_TIME_LOGS
-	printf("\tLargeBB\tCent\tEquSpl\tBucket\tCost\t\tPart\tEnqueue\tLeaves\n");
+	printf("\tLargeBB\tCent\tEquSpl\tBucket\tCost\tNode\tPart\tEnqueue\tLeaves\n");
         printf("Phases\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
         reset();	
 #endif
@@ -206,7 +206,8 @@ namespace _462 {
 
         printf("Ended parallel tree phase at %ld \n", endTime-startTime);
 #ifdef ENABLED_TIME_LOGS
-        printf("Phases %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
+	printf("\tLargeBB\tCent\tEquSpl\tBucket\tCost\tNode\tPart\tEnqueue\tLeaves\n");
+        printf("Phases\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
 #endif
         for(int i=0;i<MAX_THREADS;i++) if(busy[i]!=0)
             printf("%ld ", busy[i]);
@@ -225,7 +226,7 @@ namespace _462 {
 
         clearList(buildData);
 
-        printf("Done Building BVH at %ld \n", endTime-startTime);
+        printf("Done Building BVH at %ld \n\n", endTime-startTime);
     }
 
     BVHAccel::~BVHAccel() {
@@ -283,24 +284,25 @@ namespace _462 {
 	queueData child1Data, child2Data;
 
 	uint32_t nPrimitives = end - start;
+	AddTimeSincePreviousTick(t6);
 
 	// Compute bounds of all primitives in BVH node
-	BoundingBox bbox;
-	if (boxPtr == NULL || boxPtr->extent(0) <= 0 ||
-	    boxPtr->extent(1) <= 0 ||
-	    boxPtr->extent(2) <= 0) {
+	BoundingBox *bboxPtr;
+	if (boxPtr == NULL) {
 	    // Potentially rounding problem.
-	    AddBox(buildData, start, end, bbox);
+	    BoundingBox newBbox;
+	    AddBox(buildData, start, end, newBbox);
+	    bboxPtr = &newBbox;
 	}
 	else {
-	    bbox = *boxPtr;
-	    assert(bbox.extent(0) > 0);
+	    bboxPtr = boxPtr;
+	    assert(bboxPtr->extent(0) >= 0);
 	}
 
 	AddTimeSincePreviousTick(t1);
 
 	if (nPrimitives == 1) {
-	    buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+	    buildLeaf(buildData,start,end, orderedPrims,node,*bboxPtr);
 	}
 	else {
 	    // Compute bound of primitive centroids, choose split dimension _dim_
@@ -318,7 +320,7 @@ namespace _462 {
 	    // Change == to < to fix bug. There might be case that low is too close to high that partition
 	    // can't really separate them.
 	    if (centroidBounds.extent(dim) < 1e-5) {
-		buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+		buildLeaf(buildData,start,end, orderedPrims,node,*bboxPtr);
 		goto finishUp;
 	    }
 
@@ -366,19 +368,37 @@ namespace _462 {
 		// Compute costs for splitting after each bucket
 		float minCost = BIG_NUMBER;
 		uint32_t minCostSplit = 0;
-		for (int i = 0; i < nBuckets-1; ++i) {
+		BucketInfo inc_buckets[nBuckets - 1];
+		BucketInfo dec_buckets[nBuckets - 1];
+
+		for (uint32_t i = 0; i < nBuckets - 1; i++) {
+		    BoundingBox prev_inc;
+		    BoundingBox prev_dec;
+		    prev_inc = (i > 0) ? inc_buckets[i - 1].bounds : prev_inc;
+		    prev_dec = (i > 0) ? dec_buckets[i - 1].bounds : prev_dec;
+
+		    int prev_inc_count = (i > 0) ? inc_buckets[i - 1].count : 0;
+		    int prev_dec_count = (i > 0) ? dec_buckets[i - 1].count : 0;
+
+		    inc_buckets[i].bounds = buckets[i].bounds;
+		    inc_buckets[i].bounds.AddBox(prev_inc);
+		    inc_buckets[i].count = buckets[i].count + prev_inc_count;
+
+		    dec_buckets[i].bounds = buckets[nBuckets- 1 - i].bounds;
+		    dec_buckets[i].bounds.AddBox(prev_dec);
+		    dec_buckets[i].count = buckets[nBuckets- 1 - i].count + prev_dec_count;
+		}
+
+		for (int i = 0; i < nBuckets - 1; i++) {
 		    BoundingBox b0, b1;
 		    int count0 = 0, count1 = 0;
-		    for (int j = 0; j <= i; ++j) {
-			b0.AddBox(buckets[j].bounds);
-			count0 += buckets[j].count;
-		    }
-		    for (int j = i+1; j < nBuckets; ++j) {
-			b1.AddBox(buckets[j].bounds);
-			count1 += buckets[j].count;
-		    }
-		    float cost = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
-			bbox.SurfaceArea();
+		
+		    b0 = inc_buckets[i].bounds;
+		    b1 = dec_buckets[nBuckets - 2 - i].bounds;
+		    count0 = inc_buckets[i].count;
+		    count1 = dec_buckets[nBuckets - 2 - i].count;
+		    float cost = .125f + (count0 * b0.SurfaceArea() + count1 * b1.SurfaceArea()) /
+			bboxPtr->SurfaceArea();
 		    if (cost < minCost) {
 			minCostSplit = i;
 			child1Data.box = b0;
@@ -386,6 +406,7 @@ namespace _462 {
 			minCost = cost;
 		    }
 		}
+		
 		AddTimeSincePreviousTick(t5);
 
 		// Either create leaf or split primitives at selected SAH bucket
@@ -396,13 +417,13 @@ namespace _462 {
 		    AddTimeSincePreviousTick(t7);
 		}
 		else {
-		    buildLeaf(buildData,start,end, orderedPrims,node,bbox);
+		    buildLeaf(buildData,start,end, orderedPrims,node,*bboxPtr);
 		    goto finishUp;
 		}
 	    }
 
 	    node->splitAxis = dim;
-	    node->bounds = bbox;
+	    node->bounds = *bboxPtr;
 
 	    numInternalBranches = (nPrimitives>200)?1:2;
 	    child1Data.start = start;
@@ -472,6 +493,7 @@ namespace _462 {
                 parent->children[firstChild?0:1] = node;
 
             uint32_t nPrimitives = end - start;
+	    AddTimeSincePreviousTick(t6);
 
             // Compute bounds of all primitives in BVH node
             const int maxNumThreads = omp_get_max_threads();
@@ -562,8 +584,6 @@ namespace _462 {
                     }
                 }
 
-                AddTimeSincePreviousTick(t4);
-
                 AddBox(buildData, s, e, subBbox[threadNo]);
 
 #pragma omp barrier
@@ -575,6 +595,8 @@ namespace _462 {
 			    buckets[b].bounds.AddBox(subBuckets[i][b].bounds);
 			}
 		}
+                AddTimeSincePreviousTick(t4);
+
 #ifdef CENTROID_BASED		
 		if (boxPtr == NULL) {
 		    if(threadNo==0) 
@@ -594,21 +616,39 @@ namespace _462 {
                 delete[] subBuckets[i];
             delete[] subBuckets;
 
+	    BoundingBox chb0, chb1;
 	    float minCost = BIG_NUMBER;
 	    uint32_t minCostSplit = 0;
-	    BoundingBox chb0, chb1;
-	    for (int i = 0; i < nBuckets-1; ++i) {
+	    BucketInfo inc_buckets[nBuckets - 1];
+	    BucketInfo dec_buckets[nBuckets - 1];
+
+	    for (uint32_t i = 0; i < nBuckets - 1; i++) {
+		BoundingBox prev_inc;
+		BoundingBox prev_dec;
+		prev_inc = (i > 0) ? inc_buckets[i - 1].bounds : prev_inc;
+		prev_dec = (i > 0) ? dec_buckets[i - 1].bounds : prev_dec;
+
+		int prev_inc_count = (i > 0) ? inc_buckets[i - 1].count : 0;
+		int prev_dec_count = (i > 0) ? dec_buckets[i - 1].count : 0;
+
+		inc_buckets[i].bounds = buckets[i].bounds;
+		inc_buckets[i].bounds.AddBox(prev_inc);
+		inc_buckets[i].count = buckets[i].count + prev_inc_count;
+
+		dec_buckets[i].bounds = buckets[nBuckets- 1 - i].bounds;
+		dec_buckets[i].bounds.AddBox(prev_dec);
+		dec_buckets[i].count = buckets[nBuckets- 1 - i].count + prev_dec_count;
+	    }
+
+	    for (int i = 0; i < nBuckets - 1; i++) {
 		BoundingBox b0, b1;
 		int count0 = 0, count1 = 0;
-		for (int j = 0; j <= i; ++j) {
-		    b0.AddBox(buckets[j].bounds);
-		    count0 += buckets[j].count;
-		}
-		for (int j = i+1; j < nBuckets; ++j) {
-		    b1.AddBox(buckets[j].bounds);
-		    count1 += buckets[j].count;
-		}
-		float cost = .125f + (count0*b0.SurfaceArea() + count1*b1.SurfaceArea()) /
+		
+		b0 = inc_buckets[i].bounds;
+		b1 = dec_buckets[nBuckets - 2 - i].bounds;
+		count0 = inc_buckets[i].count;
+		count1 = dec_buckets[nBuckets - 2 - i].count;
+		float cost = .125f + (count0 * b0.SurfaceArea() + count1 * b1.SurfaceArea()) /
 		    bbox.SurfaceArea();
 		if (cost < minCost) {
 		    minCostSplit = i;
