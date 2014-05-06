@@ -10,13 +10,21 @@
 #include <vector>
 #include <deque>
 #include <queue>
+#include <cstring>
+#include <malloc.h>
+#include <omp.h>
 
 #include "scene/BoundingBox.hpp"
 namespace _462 {
+#ifdef _WINDOWS
+    #define memalign(a,b) _aligned_malloc((b),(a))
+#else
+    #define _aligned_free(a) free((a))
+#endif
 
 #define CENTROID_BASED
 #define NUM_IN_PRE_QUEUE 7
-    #define ENABLED_TIME_LOGS
+    //#define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
 
     class Geometry;
@@ -52,8 +60,83 @@ namespace _462 {
         bool isFirstChild; //true if first, false if second child of its parent
         bool childComplete[2];
 
-        uint32_t splitAxis, firstPrimOffset, nPrimitives;
+        uint8_t splitAxis;
+	uint32_t firstPrimOffset, nPrimitives;
     };
+
+    //////////////
+
+    struct BuildNodeBlock {
+	BuildNodeBlock *next;
+	BVHBuildNode *end;
+    };
+
+    struct BuildNodePool {
+	BuildNodeBlock *head;
+	BuildNodeBlock *cur_block;
+	BVHBuildNode *cur_position;
+	uint32_t MEM_BLOCK_SIZE;
+	uint32_t INC_BLOCK_SIZE;
+
+	BuildNodePool(uint32_t block_size, uint32_t inc_size) {
+	    MEM_BLOCK_SIZE = block_size;
+	    INC_BLOCK_SIZE = inc_size;
+
+	    head = NULL;
+	}
+
+	void initialize() {
+	    head = (BuildNodeBlock*) memalign(16, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE +
+					      sizeof(BuildNodeBlock));
+	    cur_block = head;
+	    cur_block->next = NULL;
+	    cur_position = (BVHBuildNode*)&(cur_block[1]);
+	    cur_block->end = cur_position + MEM_BLOCK_SIZE;
+	    memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
+	}
+
+	void destroy() {
+	    BuildNodeBlock *cur = head;
+	    while (cur != NULL) {
+		BuildNodeBlock *des = cur;
+		cur = cur->next;
+
+		_aligned_free(des);
+	    }
+
+	    head = NULL;
+	    cur_block = NULL;
+	    cur_position = NULL;
+	}
+
+	BVHBuildNode* allocate(BVHBuildNode *p, bool firstChild) {
+	    if (head == NULL)
+		initialize();
+
+	    BVHBuildNode *node = NULL;
+	    if (cur_block->end - cur_position <= 0) {
+		cur_block->next = (BuildNodeBlock*) memalign(16, sizeof(BVHBuildNode) * INC_BLOCK_SIZE +
+							     sizeof(BuildNodeBlock));
+		cur_block = cur_block->next;
+		cur_block->next = NULL;
+		cur_position = (BVHBuildNode*)&(cur_block[1]);
+		cur_block->end = cur_position + INC_BLOCK_SIZE;
+		memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
+		int tid = omp_get_thread_num();
+		printf("#%d: allocating...\n", tid);
+	    }
+
+	    node = cur_position;
+	    cur_position++;
+
+	    node->parent = p;
+	    node->isFirstChild = firstChild;
+
+	    return node;
+	}
+    };
+    
+    //////////////
 
     const int DONT_USE_AND_DELETE = 0;
     const int USE_AND_DONT_DELETE = 1;
@@ -160,7 +243,7 @@ namespace _462 {
         BVHBuildNode *root;
         std::priority_queue<queueData> pq;
         std::deque<queueData> q[MAX_THREADS];
-
+	BuildNodePool *poolPtr[MAX_THREADS];
     };
 
 }/* _462 */

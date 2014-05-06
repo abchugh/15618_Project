@@ -23,11 +23,7 @@
 #include "emmintrin.h"
 
 namespace _462 {
-#ifdef _WINDOWS
-    #define memalign(a,b) _aligned_malloc((b),(a))
-#else
-    #define _aligned_free(a) free((a))
-#endif
+
 #define LANES 8
 
     struct hitRecord

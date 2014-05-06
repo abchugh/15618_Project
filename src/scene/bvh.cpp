@@ -99,6 +99,15 @@ namespace _462 {
         pq.push(rootData);
 
         time_t endTime = SDL_GetTicks();
+	int thread_count = omp_get_max_threads();
+
+	for (int i = 0; i < thread_count; i++) {
+	    int block_size = (10 > primitives.size() / 5) ? 10 : primitives.size() / 5;
+	    int inc_size = (10 > primitives.size() / 10) ? 10 : primitives.size() / 10;
+	    poolPtr[i] = new BuildNodePool(block_size, inc_size);
+	}
+	poolPtr[thread_count] = new BuildNodePool(10, 10);
+
         printf("Started parallel node phase at %ld \n", endTime-startTime);
         while(pq.size()<=NUM_IN_PRE_QUEUE)//omp_get_max_threads())
         {
@@ -125,9 +134,8 @@ namespace _462 {
         printf("Phases\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\n", sum(t1), sum(t2), sum(t3), sum(t4), sum(t5), sum(t6), sum(t7), sum(t8), sum(tP));
         reset();	
 #endif
-
-        printf("omp_maxThreads: %d\n\n",omp_get_max_threads());
-#pragma omp parallel
+        printf("omp_maxThreads: %d\n\n", omp_get_max_threads());
+#pragma omp parallel num_threads(thread_count)
         {
 
             int tid = omp_get_thread_num();
@@ -230,12 +238,19 @@ namespace _462 {
     }
 
     BVHAccel::~BVHAccel() {
+	int thread_count = omp_get_max_threads();
+
+	for (int i = 0; i < thread_count + 1; i++) {
+	    poolPtr[i]->destroy();
+	    delete (poolPtr[i]);
+	}
+	/*
         if(root)
         {
             deleteRecursive(root);
             root = NULL;
         }
-
+	*/
         if(nodes)
         {
             delete []nodes;
@@ -276,7 +291,9 @@ namespace _462 {
 #pragma omp atomic
 	(*totalNodes)++;
 
-	BVHBuildNode *node = new BVHBuildNode(parent, firstChild);
+	//BVHBuildNode *node = new BVHBuildNode(parent, firstChild);
+	int tid = (uint32_t)omp_get_thread_num();
+	BVHBuildNode *node = poolPtr[tid]->allocate(parent, firstChild);
 	if(parent)
 	    parent->children[firstChild?0:1] = node;
 
@@ -488,7 +505,9 @@ namespace _462 {
 
             (*totalNodes)++;
 
-            BVHBuildNode *node = new BVHBuildNode(parent, firstChild);
+            //BVHBuildNode *node = new BVHBuildNode(parent, firstChild);
+	    int thread_count = omp_get_max_threads();
+	    BVHBuildNode *node = poolPtr[thread_count]->allocate(parent, firstChild);
             if(parent)
                 parent->children[firstChild?0:1] = node;
 
@@ -742,27 +761,28 @@ namespace _462 {
             return packet.size;
     }
 
-	uint32_t BVHAccel::getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active,
-        uint32_t *dirIsNeg, real_t t0, real_t t1) const {
-            Ray active_ray = packet.rays[active];
-            Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
-            dirIsNeg[0] = invDir.x < 0;
-            dirIsNeg[1] = invDir.y < 0;
-            dirIsNeg[2] = invDir.z < 0;
+    uint32_t BVHAccel::getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active,
+				  uint32_t *dirIsNeg, real_t t0, real_t t1) const {
+	Ray active_ray = packet.rays[active];
+	Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
+	dirIsNeg[0] = invDir.x < 0;
+	dirIsNeg[1] = invDir.y < 0;
+	dirIsNeg[2] = invDir.z < 0;
 
-            for (uint32_t i = packet.size - 1; i > active; i--) {
-                Ray cur_ray = packet.rays[i];
-                Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
-                dirIsNeg[0] = invDir.x < 0;
-                dirIsNeg[1] = invDir.y < 0;
-                dirIsNeg[2] = invDir.z < 0;
+	for (uint32_t i = packet.size - 1; i > active; i--) {
+	    Ray cur_ray = packet.rays[i];
+	    Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
+	    dirIsNeg[0] = invDir.x < 0;
+	    dirIsNeg[1] = invDir.y < 0;
+	    dirIsNeg[2] = invDir.z < 0;
 
-                if (box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
-                    return i+1;
-            }
+	    if (box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
+		return i+1;
+	}
 
-            return active+1;
+	return active+1;
     }
+
     void BVHAccel::traverse(const Packet& packet, vector<hitRecord>& records, 
         const real_t t0, const real_t t1) const {
             if(!nodes)
