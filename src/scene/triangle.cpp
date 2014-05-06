@@ -129,13 +129,8 @@ void Triangle::InitGeometry()
 	for(int i=0;i<3;i++)
 		bb.AddPoint(project(mat*Vector4(vertices[i].position,1)));
 }
-
-bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const
-{
-//	if(!checkBoundingBoxHit(r,t0,t1))
-	//	return false;
-
-	Ray tRay = r.transform(invMat);
+/*
+Ray tRay = r.transform(invMat);
 	real_t mult[3];
 	Vector3 position[] = { vertices[0].position, vertices[1].position, vertices[2].position };
 	const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
@@ -147,8 +142,61 @@ bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h,
 		return false;
     h.t = t;
 	if(!fullRecord)
-		return true;	
-	
+		return true;
+*/
+bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& hR, bool fullRecord) const
+{
+	Ray tRay = r.transform(invMat);
+    
+	real_t mult[3];
+
+	Vector3 a_minus_b = vertices[0].position - vertices[1].position;
+	Vector3 a_minus_c = vertices[0].position - vertices[2].position;
+	Vector3 a_minus_e = vertices[0].position - tRay.e;
+
+	real_t a = a_minus_b.x;
+	real_t b = a_minus_b.y;
+	real_t c = a_minus_b.z;
+	real_t d = a_minus_c.x;
+	real_t e = a_minus_c.y;
+	real_t f = a_minus_c.z;
+	real_t g = tRay.d.x;
+	real_t h = tRay.d.y;
+	real_t i = tRay.d.z;
+	real_t j = a_minus_e.x;
+	real_t k = a_minus_e.y;
+	real_t l = a_minus_e.z;
+
+	real_t ei_minus_hf = e * i - h * f;
+	real_t gf_minus_di = g * f - d * i;
+	real_t dh_minus_eg = d * h - e * g;
+	real_t ak_minus_jb = a * k - j * b;
+	real_t jc_minus_al = j * c - a * l;
+	real_t bl_minus_kc = b * l - k * c;
+
+	real_t M = a * ei_minus_hf + b * gf_minus_di + c * dh_minus_eg;
+	real_t time = (f * ak_minus_jb + e * jc_minus_al + d * bl_minus_kc) / -M;
+	if (time <= t0 || time >= t1) {
+		return false;
+	}
+
+	real_t beta = (j * ei_minus_hf + k * gf_minus_di + l * dh_minus_eg) / M;
+	if (beta < 0 || beta > 1)
+		return false;
+
+	real_t gamma = (i * ak_minus_jb + h * jc_minus_al + g * bl_minus_kc) / M;
+	if (gamma < 0 || gamma > 1 - beta)
+		return false;
+
+    hR.t = time;
+
+    if (!fullRecord)
+		return true;
+
+    mult[0] = 1-beta-gamma;
+	mult[1] = beta;
+    mult[2] = gamma;
+
 	Vector2 texCoord(0,0);
 	for(int i=0;i<3;i++)
 		texCoord += mult[i]*vertices[i].tex_coord;
@@ -158,15 +206,16 @@ bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h,
 	if(texCoord[0]<0) texCoord[0]+=1;
 	if(texCoord[1]<0) texCoord[0]+=1;
 	
+	const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
 	if(!simple)
-		getMaterialProperties(h.mp, mult,texCoord, materials);
+		getMaterialProperties(hR.mp, mult,texCoord, materials);
 	else
-		getMaterialProperties(h.mp,texCoord, materials[0]);
+		getMaterialProperties(hR.mp,texCoord, materials[0]);
 
-	h.n = Vector3(0,0,0);
+	hR.n = Vector3(0,0,0);
 	for(int i=0;i<3;i++)
-	    h.n += mult[i]*vertices[i].normal;
-	h.n = normalize( normMat*h.n);
+	    hR.n += mult[i]*vertices[i].normal;
+	hR.n = normalize( normMat*hR.n);
 
 	
 	return true;

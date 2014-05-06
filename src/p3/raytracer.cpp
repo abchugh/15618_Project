@@ -162,9 +162,7 @@ namespace _462 {
             std::vector<real_t> refractiveStack;
             refractiveStack.push_back(scene->refractive_index);
 
-            hitRecord h;
-            h.t = 1e30;
-            res += scene->getColor(r, refractiveStack, h);
+            res += scene->getColor(r, refractiveStack);
         }
         return res*(real_t(1)/num_samples);
     }
@@ -196,6 +194,7 @@ namespace _462 {
 
             frustum.planes[TOP].point = frustum.planes[BOTTOM].point = 
                 frustum.planes[LEFT].point = frustum.planes[RIGHT].point = eye;
+            frustum.isValid = true;
     }
 
     // calculate direction of initial viewing ray from camera
@@ -281,8 +280,6 @@ namespace _462 {
 
             size_t packet_ray_size = packet_width_ray * packet_width_ray;
             size_t num_packet = (num_samples + packet_ray_size) / packet_ray_size;
-            std::vector<real_t> refractiveStack;
-            refractiveStack.push_back(scene->refractive_index);
 
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
             for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
@@ -305,8 +302,16 @@ namespace _462 {
                             build_packet(p_x, p_y, width, height, packet);
 
                             // Get color
-                            scene->getColors(packet, refractiveStack,
-                                packet_color);
+                            
+                            std::vector< std::vector<real_t> > refractiveStack;
+                            for(int i=0;i<packet.size;i++)
+                            {
+                                std::vector<real_t> rstack;
+                                rstack.push_back(scene->refractive_index);
+                                refractiveStack.push_back(rstack);
+                            }
+
+                            scene->getColors(packet, refractiveStack, packet_color);
 
                             for (size_t count = 0; count < packet_ray_size; count++) 
                                 cur_color += packet_color[count];
@@ -322,8 +327,6 @@ namespace _462 {
     void Raytracer::trace_large_packet(unsigned char* buffer, size_t width, size_t height) {
         size_t work_num_x = (width + pixel_width - 1) / pixel_width;
         size_t work_num_y = (height + pixel_width - 1) / pixel_width;
-        std::vector<real_t> refractiveStack;
-        refractiveStack.push_back(scene->refractive_index);
         reset();
         time_t start = SDL_GetTicks();
         // Work should be balanced automatically.
@@ -350,6 +353,15 @@ namespace _462 {
 
                     // Get color here. (func in scene)
                     vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
+                    
+                    std::vector< std::vector<real_t> > refractiveStack;
+                    for(int i=0;i<packet.size;i++)
+                    {
+                        std::vector<real_t> rstack;
+                        rstack.push_back(scene->refractive_index);
+                        refractiveStack.push_back(rstack);
+                    }
+
                     scene->getColors(packet, refractiveStack,packet_color);
 
                     td[omp_get_thread_num()] += SDL_GetTicks() -tt;
@@ -422,7 +434,7 @@ namespace _462 {
             unsigned int duration = (unsigned int) (*max_time * 1000);
             end_time = SDL_GetTicks() + duration;
         }
-
+        //packet_tracing = false;
         if (!packet_tracing) {
             // until time is up, run the raytrace. we render an entire group of
             // rows at once for simplicity and efficiency.

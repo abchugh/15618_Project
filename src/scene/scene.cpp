@@ -165,6 +165,60 @@ namespace _462 {
         refractive_index = 1.0;
     }
 
+    //n,     kd
+    //h[i].n,h[i].mp.diffuse
+    
+    void Scene::calculateDiffuseColors(vector<Vector3>& p,vector<hitRecord>& h,vector<Color3>& col) const
+    {
+        int numRays = p.size();
+        
+        int indices[1024];
+        assert(numRays<=1024);
+        for(unsigned int l=0;l<point_lights.size();l++)
+        {
+            int numShadowRays = 0;
+            vector<Vector3> locs;
+            locs.reserve(numRays);
+            vector<real_t> NDotLs;
+            NDotLs.reserve(numRays);
+            for(int i=0;i<numRays;i++) if(h[i].t>=0)//check if this actually hit something
+            {
+                real_t x = random_gaussian(), y = random_gaussian(), z = random_gaussian();
+                Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
+                Vector3 L = normalize(loc-p[i]);
+                real_t NDotL = dot(h[i].n,L);
+
+                if(NDotL<=0) continue;
+                locs.push_back(loc);
+                NDotLs.push_back(NDotL);
+                indices[numShadowRays++] = i;
+
+                
+            }
+            
+            Packet pkt(numShadowRays);
+            for(int i=0;i<numShadowRays;i++)
+            {
+                pkt.rays[i].e = p[ indices[i] ];
+                pkt.rays[i].d = locs[i] - p[ indices[i] ];
+            }
+            vector<hitRecord> hShadow(numShadowRays);
+            tree->hit(pkt, SLOP, 1, hShadow, false);
+            
+            for(int i=0;i<numShadowRays;i++)
+            {
+                //We just want to check if something is between the point and the source
+                if(hShadow[i].t<0)
+                {
+                    Color3 c = point_lights[l].color;
+                    real_t d = sqrt( dot(p[ indices[i] ]-point_lights[l].position,p[ indices[i] ]-point_lights[l].position) );
+                    c /= point_lights[l].attenuation.constant + d*point_lights[l].attenuation.linear + d*d*point_lights[l].attenuation.quadratic;
+                    col[ indices[i] ] += h[indices[i]].mp.diffuse*c*NDotLs[ i ];
+                }
+            }
+            //average over the simulations
+        }
+    }
     Color3 Scene::calculateDiffuseColor(Vector3 p,Vector3 n,Color3 kd) const
     {
         /*Number of shadow rays fired to light source*/
@@ -257,33 +311,115 @@ namespace _462 {
         }
     }
 
-    void Scene::getColors(const Packet& packet, std::vector<real_t> refractiveStack, std::vector<Color3>& colors, int depth, real_t t0, real_t t1) const {
-        vector<hitRecord> records(packet.size);
+    void Scene::getColors(const Packet& packet, std::vector<std::vector<real_t> > refractiveStack, std::vector<Color3>& col, int depth, real_t t0, real_t t1) const 
+    {
+        vector<hitRecord> h(packet.size);
 
-        time_t startTime = SDL_GetTicks();
-        tree->traverse(packet, records, t0, t1);
-
-        ta[omp_get_thread_num()] += SDL_GetTicks() - startTime;
-        // Use the old function to handle secondary rays.
-        // TODO: replace color3 to buffer?
-        for (size_t i = 0; i < packet.size; i++) {
-            if (records[i].t < t1)
-                colors[i] = getColor(packet.rays[i], refractiveStack, records[i],
-                depth, t0, t1);
+        tree->hit(packet, t0, t1, h, true);
+        
+        //Add the ambient component
+        
+        vector<Vector3> p(packet.size);
+        for(int i=0;i<packet.size;i++)
+        {
+            if(h[i].t<0)
+                col[i] = Scene::background_color;
+            else
+            {
+                col[i] = Color3(0,0,0);
+                if(h[i].mp.refractive_index == 0)
+                    col[i] += Scene::ambient_light*h[i].mp.ambient;
+                p[i] = packet.rays[i].e + h[i].t*packet.rays[i].d;
+            }
         }
-        tb[omp_get_thread_num()] += SDL_GetTicks() - startTime;
+        calculateDiffuseColors(p,h,col);
+        
+        for(int i=0; i<packet.size;i++) if(h[i].t>=0)
+        {
+            if(depth>0)
+            {
+                real_t reflectedRatio;
+                Color3 reflectedColor(0,0,0);
+                Color3 refractedColor(0,0,0);
+                if(h[i].mp.specular!=Color3(0,0,0))
+                {
+                    Ray reflectedRay(p[i],normalize(packet.rays[i].d - 2 *dot(packet.rays[i].d,h[i].n) *h[i].n));
+                
+
+                    if(num_glossy_reflection_samples>0)
+                    {
+                        for(int i=0;i< num_glossy_reflection_samples;i++)
+                        {
+                            Ray newRay = distortRay(reflectedRay,0.125);
+                            reflectedColor += h[i].mp.specular*getColor(newRay, refractiveStack[i], depth-1, SLOP);
+                        }
+                        reflectedColor /= num_glossy_reflection_samples;
+                    }
+                    else
+                        reflectedColor = h[i].mp.specular*getColor(reflectedRay,refractiveStack[i], depth-1, SLOP);
+                }
+
+                //Refraction not possible
+                if(h[i].mp.refractive_index == 0)
+                    reflectedRatio = 1.0;
+                else
+                {
+                    real_t currentRI = refractiveStack[i].back();
+                    if(currentRI == h[i].mp.refractive_index)
+                    {
+                        if(refractiveStack[i].size()>0)
+                        {
+                            refractiveStack.pop_back();
+                            h[i].mp.refractive_index = refractiveStack[i].back();
+                        }
+                        else
+                            h[i].mp.refractive_index = Scene::refractive_index;
+                    }
+                    else
+                        refractiveStack[i].push_back(h[i].mp.refractive_index);
+
+                    real_t RIRatio = currentRI/h[i].mp.refractive_index;
+
+                    if(RIRatio>1)	//If entering a rarer medium, reverse normal direction
+                        h[i].n*=-1;
+
+                    real_t dDotN = dot(normalize(packet.rays[i].d),h[i].n);
+                    real_t cosSq = 1-RIRatio*RIRatio*(1-dDotN*dDotN);
+
+                    if(cosSq<0)	//Total Internal Reflection
+                    {
+                        reflectedRatio = 1.0;
+                        refractiveStack[i].push_back(currentRI);
+                    }
+                    else
+                    {
+                        real_t cosTheta = sqrt(cosSq);
+                        Vector3 dir = (normalize(packet.rays[i].d) - h[i].n *dDotN)*RIRatio - h[i].n*cosTheta; 
+                        Ray refractedRay(p[i],dir);
+
+                        refractedColor = getColor(refractedRay, refractiveStack[i], depth-1, SLOP);
+
+                        if(h[i].mp.refractive_index<currentRI)
+                            cosTheta = dDotN;
+                        real_t normalReflectance = pow( (h[i].mp.refractive_index-1)/(h[i].mp.refractive_index+1),2);
+                        reflectedRatio = normalReflectance + normalReflectance *pow(1-cosTheta,5);
+                    }
+                }
+                //Add the two components to the pixel color
+                col[i] += reflectedRatio*reflectedColor + (1-reflectedRatio)*refractedColor;
+            }
+            //Finally multiply by the texture color
+            col[i] *= h[i].mp.texColor;
+        }
     }
 
-    Color3 Scene::getColor(const Ray& r, std::vector<real_t> refractiveStack, hitRecord& h, int depth, real_t t0, real_t t1) const
+    Color3 Scene::getColor(const Ray& r, std::vector<real_t> refractiveStack, int depth, real_t t0, real_t t1) const
     {
+        hitRecord h;
         // Invalid value.
-        if (h.t >= t1 - 1e-3) {
-            if(!tree->hit(r, t0, t1, h, true))
-                return Scene::background_color;	//Nothing hit, return background color
-        }
-        else if (h.t < 0)
-            return Scene::background_color;	// Has been checked within a packet
-
+        if(!tree->hit(r, t0, t1, h, true))
+            return Scene::background_color;	//Nothing hit, return background color
+        
         //Add the ambient component
         Color3 col(0,0,0);
         if(h.mp.refractive_index == 0)
@@ -302,22 +438,19 @@ namespace _462 {
             if(h.mp.specular!=Color3(0,0,0))
             {
                 Ray reflectedRay(p,normalize(r.d - 2 *dot(r.d,h.n) *h.n));
-                hitRecord new_h;
-                new_h.t = t1;
+                
 
                 if(num_glossy_reflection_samples>0)
                 {
                     for(int i=0;i< num_glossy_reflection_samples;i++)
                     {
                         Ray newRay = distortRay(reflectedRay,0.125);
-                        reflectedColor += h.mp.specular*getColor(newRay, refractiveStack,
-                            new_h, depth-1, SLOP);
+                        reflectedColor += h.mp.specular*getColor(newRay, refractiveStack, depth-1, SLOP);
                     }
                     reflectedColor /= num_glossy_reflection_samples;
                 }
                 else
-                    reflectedColor = h.mp.specular*getColor(reflectedRay,refractiveStack, 
-                    new_h, depth-1, SLOP);
+                    reflectedColor = h.mp.specular*getColor(reflectedRay,refractiveStack, depth-1, SLOP);
             }
 
             //Refraction not possible
@@ -357,11 +490,8 @@ namespace _462 {
                     real_t cosTheta = sqrt(cosSq);
                     Vector3 dir = (normalize(r.d) - h.n *dDotN)*RIRatio - h.n*cosTheta; 
                     Ray refractedRay(p,dir);
-                    hitRecord new_h;
-                    new_h.t = t1;
 
-                    refractedColor = getColor(refractedRay, refractiveStack,
-                        new_h, depth-1, SLOP);
+                    refractedColor = getColor(refractedRay, refractiveStack, depth-1, SLOP);
 
                     if(h.mp.refractive_index<currentRI)
                         cosTheta = dDotN;

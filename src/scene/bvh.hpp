@@ -61,81 +61,81 @@ namespace _462 {
         bool childComplete[2];
 
         uint8_t splitAxis;
-	uint32_t firstPrimOffset, nPrimitives;
+        uint32_t firstPrimOffset, nPrimitives;
     };
 
     //////////////
 
     struct BuildNodeBlock {
-	BuildNodeBlock *next;
-	BVHBuildNode *end;
+        BuildNodeBlock *next;
+        BVHBuildNode *end;
     };
 
     struct BuildNodePool {
-	BuildNodeBlock *head;
-	BuildNodeBlock *cur_block;
-	BVHBuildNode *cur_position;
-	uint32_t MEM_BLOCK_SIZE;
-	uint32_t INC_BLOCK_SIZE;
+        BuildNodeBlock *head;
+        BuildNodeBlock *cur_block;
+        BVHBuildNode *cur_position;
+        uint32_t MEM_BLOCK_SIZE;
+        uint32_t INC_BLOCK_SIZE;
 
-	BuildNodePool(uint32_t block_size, uint32_t inc_size) {
-	    MEM_BLOCK_SIZE = block_size;
-	    INC_BLOCK_SIZE = inc_size;
+        BuildNodePool(uint32_t block_size, uint32_t inc_size) {
+            MEM_BLOCK_SIZE = block_size;
+            INC_BLOCK_SIZE = inc_size;
 
-	    head = NULL;
-	}
+            head = NULL;
+        }
 
-	void initialize() {
-	    head = (BuildNodeBlock*) memalign(16, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE +
-					      sizeof(BuildNodeBlock));
-	    cur_block = head;
-	    cur_block->next = NULL;
-	    cur_position = (BVHBuildNode*)&(cur_block[1]);
-	    cur_block->end = cur_position + MEM_BLOCK_SIZE;
-	    memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
-	}
+        void initialize() {
+            head = (BuildNodeBlock*) memalign(16, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE +
+                sizeof(BuildNodeBlock));
+            cur_block = head;
+            cur_block->next = NULL;
+            cur_position = (BVHBuildNode*)&(cur_block[1]);
+            cur_block->end = cur_position + MEM_BLOCK_SIZE;
+            memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
+        }
 
-	void destroy() {
-	    BuildNodeBlock *cur = head;
-	    while (cur != NULL) {
-		BuildNodeBlock *des = cur;
-		cur = cur->next;
+        void destroy() {
+            BuildNodeBlock *cur = head;
+            while (cur != NULL) {
+                BuildNodeBlock *des = cur;
+                cur = cur->next;
 
-		_aligned_free(des);
-	    }
+                _aligned_free(des);
+            }
 
-	    head = NULL;
-	    cur_block = NULL;
-	    cur_position = NULL;
-	}
+            head = NULL;
+            cur_block = NULL;
+            cur_position = NULL;
+        }
 
-	BVHBuildNode* allocate(BVHBuildNode *p, bool firstChild) {
-	    if (head == NULL)
-		initialize();
+        BVHBuildNode* allocate(BVHBuildNode *p, bool firstChild) {
+            if (head == NULL)
+                initialize();
 
-	    BVHBuildNode *node = NULL;
-	    if (cur_block->end - cur_position <= 0) {
-		cur_block->next = (BuildNodeBlock*) memalign(16, sizeof(BVHBuildNode) * INC_BLOCK_SIZE +
-							     sizeof(BuildNodeBlock));
-		cur_block = cur_block->next;
-		cur_block->next = NULL;
-		cur_position = (BVHBuildNode*)&(cur_block[1]);
-		cur_block->end = cur_position + INC_BLOCK_SIZE;
-		memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
-		int tid = omp_get_thread_num();
-		printf("#%d: allocating...\n", tid);
-	    }
+            BVHBuildNode *node = NULL;
+            if (cur_block->end - cur_position <= 0) {
+                cur_block->next = (BuildNodeBlock*) memalign(16, sizeof(BVHBuildNode) * INC_BLOCK_SIZE +
+                    sizeof(BuildNodeBlock));
+                cur_block = cur_block->next;
+                cur_block->next = NULL;
+                cur_position = (BVHBuildNode*)&(cur_block[1]);
+                cur_block->end = cur_position + INC_BLOCK_SIZE;
+                memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
+                int tid = omp_get_thread_num();
+                printf("#%d: allocating...\n", tid);
+            }
 
-	    node = cur_position;
-	    cur_position++;
+            node = cur_position;
+            cur_position++;
 
-	    node->parent = p;
-	    node->isFirstChild = firstChild;
+            node->parent = p;
+            node->isFirstChild = firstChild;
 
-	    return node;
-	}
+            return node;
+        }
     };
-    
+
     //////////////
 
     const int DONT_USE_AND_DELETE = 0;
@@ -146,7 +146,7 @@ namespace _462 {
     {
         uint32_t start, end;
         BVHBuildNode* parent;
-	BoundingBox box;
+        BoundingBox box;
         bool isFirstChild;
 
         char* status;//when in both q and pq-> 1-use and dont delete, 0 don't use and delete,   when only in one of q and pq-> 2-use and delete
@@ -215,25 +215,25 @@ namespace _462 {
 
         void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
-        void traverse(const Packet& packet, std::vector<hitRecord>& records, const real_t t0, const real_t t1) const;
+        void hit(const Packet& packet, const real_t t0, const real_t t1, std::vector<hitRecord>& records, bool fullRecord) const;
 
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
-				     BoundingBox *boxPtr, uint32_t *totalNodes,
-				     std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL,
-				     bool firstChild = true);
+            BoundingBox *boxPtr, uint32_t *totalNodes,
+            std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL,
+            bool firstChild = true);
         BVHBuildNode *fastRecursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,
-					 BoundingBox *boxPtr, 
+            BoundingBox *boxPtr, 
             uint32_t *totalNodes, std::vector<Geometry*> &orderedPrims, BVHBuildNode *parent = NULL, bool firstChild = true);
         void buildLeaf(PrimitiveInfoList &buildData, uint32_t start,
             uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
 
-        uint32_t getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active, 
-            uint32_t *dirIsNeg, real_t t0, real_t t1) const;
+        uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active,
+            uint32_t *dirIsNeg, real_t t0, real_t t1, const std::vector<hitRecord>& records, bool fullRecord) const;
 
         uint32_t getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active, 
-            uint32_t *dirIsNeg, real_t t0, real_t t1) const;
+            uint32_t *dirIsNeg, real_t t0, real_t t1, const std::vector<hitRecord>& records, bool fullRecord) const;
 
         uint32_t maxPrimsInNode;
         enum SplitMethod { SPLIT_MIDDLE, SPLIT_EQUAL_COUNTS, SPLIT_SAH };
@@ -243,7 +243,7 @@ namespace _462 {
         BVHBuildNode *root;
         std::priority_queue<queueData> pq;
         std::deque<queueData> q[MAX_THREADS];
-	BuildNodePool *poolPtr[MAX_THREADS];
+        BuildNodePool *poolPtr[MAX_THREADS];
     };
 
 }/* _462 */
