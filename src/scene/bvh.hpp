@@ -23,7 +23,7 @@ namespace _462 {
 #endif
 
 #define CENTROID_BASED
-#define NUM_IN_PRE_QUEUE 7
+#define NUM_IN_PRE_QUEUE 11
     //#define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
 
@@ -121,7 +121,7 @@ namespace _462 {
                 cur_block->next = NULL;
                 cur_position = (BVHBuildNode*)&(cur_block[1]);
                 cur_block->end = cur_position + INC_BLOCK_SIZE;
-                memset((char*)cur_position, 0, sizeof(BVHBuildNode) * MEM_BLOCK_SIZE);
+                memset((char*)cur_position, 0, sizeof(BVHBuildNode) * INC_BLOCK_SIZE);
                 int tid = omp_get_thread_num();
                 printf("#%d: allocating...\n", tid);
             }
@@ -229,7 +229,7 @@ namespace _462 {
             uint32_t end, std::vector<Geometry* > &orderedPrims, BVHBuildNode *node, const BoundingBox& bbox);
         uint32_t flattenBVHTree(BVHBuildNode *node, uint32_t *offset);
 
-        uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active,
+        uint32_t getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active,
             uint32_t *dirIsNeg, real_t t0, real_t t1, const std::vector<hitRecord>& records, bool fullRecord) const;
 
         uint32_t getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active, 

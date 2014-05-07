@@ -99,6 +99,7 @@ namespace _462 {
         pq.push(rootData);
 
         time_t endTime = SDL_GetTicks();
+		omp_set_num_threads(12);
         int thread_count = omp_get_max_threads();
 
         for (int i = 0; i < thread_count; i++) {
@@ -107,7 +108,7 @@ namespace _462 {
             poolPtr[i] = new BuildNodePool(block_size, inc_size);
         }
         poolPtr[thread_count] = new BuildNodePool(10, 10);
-
+		
         printf("Started parallel node phase at %ld \n", endTime-startTime);
         while(pq.size()<=NUM_IN_PRE_QUEUE)//omp_get_max_threads())
         {
@@ -240,16 +241,16 @@ namespace _462 {
     BVHAccel::~BVHAccel() {
         int thread_count = omp_get_max_threads();
 
-        /*for (int i = 0; i < thread_count + 1; i++) {
-            poolPtr[i]->destroy();//crash here
+        for (int i = 0; i < thread_count + 1; i++) {
+            poolPtr[i]->destroy();
             delete (poolPtr[i]);
-        }*/
+        }
         
-        if(root)
+        /*if(root)
         {
             deleteRecursive(root);
             root = NULL;
-        }
+        }*/
         
         if(nodes)
         {

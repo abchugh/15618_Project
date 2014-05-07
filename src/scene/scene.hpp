@@ -205,7 +205,7 @@ namespace _462 {
 
         bool hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
         Color3 calculateDiffuseColor(Vector3 p, Vector3 n, Color3 kd)const;
-        void Scene::calculateDiffuseColors(std::vector<Vector3>& p, std::vector<hitRecord>& h, std::vector<Color3>& col) const;
+        void calculateDiffuseColors(std::vector<Vector3>& p, std::vector<hitRecord>& h, std::vector<Color3>& col) const;
 
         void InitGeometry();
         void buildBVH();
