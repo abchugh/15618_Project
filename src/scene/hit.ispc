@@ -1,20 +1,23 @@
 
 typedef float<3> Vector3;
 
-void hit(uniform float e_x[], uniform float e_y[], uniform float e_z[],
-         uniform float invDir_x[], uniform float invDir_y[], uniform float invDir_z[],
-         uniform float t0[], uniform float t1[], 
+export uniform int hit(uniform float e_x[], uniform float e_y[], uniform float e_z[],
+         uniform float dir_x[], uniform float dir_y[], uniform float dir_z[],
+         uniform float t0, uniform float t1, 
          uniform float lowCoord[], uniform float highCoord[],
-         uniform int start, uniform int end, uniform int8 result[]) 
+         uniform int start, uniform int end) 
 {
     int<3> dirIsNeg;
     uniform int continue_flag = 1;
+    uniform int minHit = 1000000;
     int local = 1;
-
-    foreach (i = start ... end) 
+    for (uniform int ind = start; ind<end ; ind+=programCount) 
     {
+        int i = ind + programIndex;
+        if(i>=end)
+            break;
         Vector3 e = {e_x[i], e_y[i], e_z[i]};
-        Vector3 invDir = {invDir_x[i], invDir_y[i], invDir_z[i]};
+        Vector3 invDir = {1/dir_x[i], 1/dir_y[i], 1/dir_z[i]};
         dirIsNeg = invDir < 0;
 
         float tmin = (dirIsNeg[0] *  highCoord[0]) + (1 - dirIsNeg[0]) * lowCoord[0];
@@ -27,33 +30,46 @@ void hit(uniform float e_x[], uniform float e_y[], uniform float e_z[],
         float tymax = (dirIsNeg[1] *  lowCoord[1]) + (1 - dirIsNeg[1]) * highCoord[1];
         tymax = (tymax - e[1]) * invDir[1];
 
-        local = (tmin > tymax) || (tymin > tmax);
+        local = !((tmin > tymax) || (tymin > tmax));
 
         // TODO: maybe expensive
         continue_flag = reduce_add(local);
-        if (!continue_flag) {
-            result[i] = local;
+        //if(ind ==192 && programIndex ==0)
+        //print("%\n %\n %\n %\n %\n %\n %\n %\n %\n %\n\n", tmin, tmax, tymin, tymax, e[0], e[1], e[2], invDir[0], invDir[1], invDir[2]);
+            
+        if (!continue_flag)
+        {
             continue;
         }
 
-        tmin = max(tmin, tymin);
-        tmax = min(tmax, tymax);
+        if (tymin > tmin) tmin = tymin;
+        if (tymax < tmax) tmax = tymax;
 
         float tzmin = (dirIsNeg[2] *  highCoord[2]) + (1 - dirIsNeg[2]) * lowCoord[2];
         tzmin = (tzmin - e[2]) * invDir[2];
         float tzmax = (dirIsNeg[2] *  lowCoord[2]) + (1 - dirIsNeg[2]) * highCoord[2];
         tzmax = (tzmax - e[2]) * invDir[2];
 
-        local &= (tmin > tzmax) || (tzmin > tmax);
+        local &= ! ((tmin > tzmax) || (tzmin > tmax));
 
         // Because the cost after this is low, we don't check local flag?
+        
+        if (tzmin > tmin)   tmin = tzmin;
+        if (tzmax < tmax)   tmax = tzmax;
 
-        tmin = max(tmin, tzmin);
-        tmax = min(tmax, tzmax);
-
-        local &= (tmax < t0[i]) || (tmin > t1[i]);
+        local &= !( tmax<t0 || tmin>t1 );
         local &= (tmin <= tmax + 1e-5);
 
-        result[i] = local;
+        //if(ind ==192 && programIndex ==0)
+        //print("\nbh:%\n %\n %\n %\n %\n %\n %\n", ind, programIndex, tmin, tmax, local, tzmin, tzmax);//, e[0], e[1], e[2], invDir[0], invDir[1], invDir[2]);
+            
+        int gen = i + (1-local)*1000000;
+        minHit = reduce_min(gen);
+        if(minHit<10000)
+            break;
     }
+    if(minHit<end)
+        return minHit;
+    else
+        return end;
 }

@@ -6,6 +6,7 @@
 #include <omp.h>
 
 #include <map>
+#include "scene/hit_ispc.h"
 
 //#define printf(...) 
 using namespace std;
@@ -748,16 +749,33 @@ finishUp:
                 return active;
             if (packet.frustum.isValid && !box.hit(packet.frustum))
                 return packet.size;
-            for (uint32_t i = active + 1; i < packet.size; i++) {
-                Ray cur_ray = packet.rays[i];
-                Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
-                dirIsNeg[0] = invDir.x < 0;
-                dirIsNeg[1] = invDir.y < 0;
-                dirIsNeg[2] = invDir.z < 0;
 
-                if ( (fullRecord || records[i].t>=1 ) && box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
-                    return i;
+            
+            if(fullRecord)
+            {
+                float* low = new float[3];
+                float* high = new float[3];
+                for(int i=0;i<3;i++)
+                {
+                    low[i] = box.lowCoord[i];
+                    high[i] = box.highCoord[i];
+                }
+                int val = ispc::hit(packet.e_x, packet.e_y, packet.e_z, packet.d_x,packet.d_y,packet.d_z, t0, t1, low, high, active+1, packet.size);
+                delete low;
+                delete high;
+                return val;
             }
+            else
+                for (uint32_t i = active+1; i < packet.size; i++) {
+                    Ray cur_ray = packet.rays[i];
+                    Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
+                    dirIsNeg[0] = invDir.x < 0;
+                    dirIsNeg[1] = invDir.y < 0;
+                    dirIsNeg[2] = invDir.z < 0;
+
+                    if ( (fullRecord || records[i].t>=1 ) && box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
+                        return i;
+                }
 
             return packet.size;
     }
