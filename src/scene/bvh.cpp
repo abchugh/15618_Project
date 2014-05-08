@@ -830,7 +830,9 @@ finishUp:
         for (uint32_t i = 0; i < packet.size; i++)
             records[i].t = t1*2;
 
-        hitRecord h1;
+        
+	    real_t* t1s = new real_t[packet.size];
+
         while (true) {
             const LinearBVHNode *node = &nodes[nodeNum];
 
@@ -863,12 +865,21 @@ finishUp:
                     // TODO: SIMDize by rewriting hit function
                     // Better to use large packet.
                     uint32_t lastActive = getLastHit(packet, node->bounds, active, dirIsNeg, t0, t1_max, records, fullRecord);
-                    for (uint32_t i = active; i < lastActive; i++) {
+                    
+                    for (uint32_t i = active; i < lastActive; i++)
+                        t1s[i] = records[i].t;
+
+                    for (uint32_t j = 0; j < node->nPrimitives; j++) {
+                        primitives[node->primitivesOffset + j]->hitPacket(packet, active, lastActive, t0, t1s, records, fullRecord);
+                    }
+                    
+                    /*for (uint32_t i = active; i < lastActive; i++) {
                         for (uint32_t j = 0; j < node->nPrimitives; j++) {
                             // Use full record, since we still don't know how to deal with shadow ray (yet).
+                            
                             primitives[node->primitivesOffset + j]->hit(packet.rays[i], t0, records[i].t, records[i], fullRecord);
                         }
-                    }
+                    }*/
 
                     if (todoOffset == 0)
                         break;
@@ -884,6 +895,7 @@ finishUp:
             }
         }
 
+        delete[] t1s;
         // Set t value of rays that miss all prim to negative.
         // So we can go early out function getColor
         for (uint32_t i = 0; i < packet.size; i++) {

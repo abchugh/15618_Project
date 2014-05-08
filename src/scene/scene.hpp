@@ -131,7 +131,7 @@ namespace _462 {
         */
         virtual void render() const = 0;
         virtual bool hit(const Ray& r, real_t t0, real_t t1, hitRecord& h, bool fullRecord) const = 0;
-        virtual void hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, hitRecord* hs, bool fullRecord) const = 0;
+        virtual void hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, std::vector<hitRecord>& hs, bool fullRecord) const = 0;
         virtual void InitGeometry();
         virtual void Transform(real_t translate, const Vector3 rotate);
         bool checkBoundingBoxHit(const Ray& r, real_t t0, real_t t1)const;

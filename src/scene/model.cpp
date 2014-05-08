@@ -89,8 +89,10 @@ void Model::InitGeometry()
 }
 
     // TODO: model's hitpacket
-void Model::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, hitRecord* hs, bool fullRecord) const {
-
+void Model::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, std::vector<hitRecord>& hs, bool fullRecord) const {
+  
+    for(int i=start; i<end; i++)
+        bvh->hit(packet.rays[i], t0, t1[i], hs[i], fullRecord);
 }
 
 bool Model::hit(const Ray& r, const real_t t0, const real_t t1,hitRecord& h, bool fullRecord) const

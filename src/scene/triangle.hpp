@@ -41,7 +41,7 @@ public:
     virtual void render() const;
 	
     virtual bool hit(const Ray& r, real_t t0, real_t t1, hitRecord& h, bool fullRecord) const;
-    virtual void hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, hitRecord* hs, bool fullRecord) const;
+    virtual void hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, std::vector<hitRecord>& hs, bool fullRecord) const;
     virtual void InitGeometry();
     static bool getBarycentricCoordinates(const Ray& r, real_t& t,real_t mult[3], Vector3 position[3]);
     static void getMaterialProperties(MaterialProp& mp, const real_t mult[3],const Vector2& texCoord, const Material* materials[3]);

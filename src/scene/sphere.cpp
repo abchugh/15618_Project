@@ -109,7 +109,7 @@ void Sphere::InitGeometry()
 }
 
     // TODO: sphere's hitpacket
-void Sphere::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1Ptr, hitRecord* hs, bool fullRecord) const {
+void Sphere::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1Ptr, std::vector<hitRecord>& hs, bool fullRecord) const {
 
 }
 
