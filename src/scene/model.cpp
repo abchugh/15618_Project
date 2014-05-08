@@ -88,6 +88,11 @@ void Model::InitGeometry()
 	bvh = new BVHAccel(geometries);
 }
 
+    // TODO: model's hitpacket
+void Model::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, hitRecord* hs, bool fullRecord) const {
+
+}
+
 bool Model::hit(const Ray& r, const real_t t0, const real_t t1,hitRecord& h, bool fullRecord) const
 {
 	if(!checkBoundingBoxHit(r,t0,t1))

@@ -261,7 +261,6 @@ namespace _462 {
                 }
             }
         }
-
         x_min = x;
         x_max = x + packet_width_pixel;
         y_min = y;
@@ -347,7 +346,6 @@ namespace _462 {
                     // Clamped along the boundary.
                     Packet packet(packet_width_ray * packet_width_ray);
                     build_packet(p_x, p_y, width, height, packet);
-
 
                     tc[omp_get_thread_num()] += SDL_GetTicks() -tt;
 
@@ -493,7 +491,8 @@ namespace _462 {
                 pixel_width /= packet_width_pixel;
                 pixel_width *= packet_width_pixel;
 
-                printf("#p: %ld; pp: %ld; #s: %ld; wp: %ld\n", num_p, packet_width_pixel, num_samples, pixel_width);
+                printf("#p: %d; pp: %d; pr: %d; #s: %d; wp: %d\n", num_p, packet_width_pixel, 
+		       packet_width_ray, num_samples, pixel_width);
 
                 trace_large_packet(buffer, width, height);
                 is_done = true;

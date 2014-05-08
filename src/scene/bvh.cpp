@@ -81,8 +81,10 @@ namespace _462 {
         time_t startTime = SDL_GetTicks();
 
         printf("Building BVH...\n");
+
         maxPrimsInNode = min(255u, mp);
         primitives = geometries;
+	printf("Triangles: %d\n", primitives.size());
 
         if (primitives.size() == 0)
             return;
@@ -104,11 +106,11 @@ namespace _462 {
         int thread_count = omp_get_max_threads();
 
         for (int i = 0; i < thread_count; i++) {
-            int block_size = (10 > primitives.size() / 5) ? 10 : primitives.size() / 5;
+            int block_size = (10 > primitives.size() / 4) ? 10 : primitives.size() / 4;
             int inc_size = (10 > primitives.size() / 10) ? 10 : primitives.size() / 10;
             poolPtr[i] = new BuildNodePool(block_size, inc_size);
         }
-        poolPtr[thread_count] = new BuildNodePool(10, 10);
+        poolPtr[thread_count] = new BuildNodePool(40, 10);
 		
         printf("Started parallel node phase at %ld \n", endTime-startTime);
         while(pq.size()<=NUM_IN_PRE_QUEUE)//omp_get_max_threads())
@@ -307,7 +309,14 @@ namespace _462 {
 
             // Compute bounds of all primitives in BVH node
             BoundingBox *bboxPtr;
-            if (boxPtr == NULL) {
+
+	    // Known issue here: when node becomes extremely small, some primitives may
+	    // fall out of their bin because of rounding issue.
+            if (boxPtr == NULL ||
+		end - start < 20 ||
+		boxPtr->extent(0) < 0 ||
+		boxPtr->extent(1) < 0 ||
+		boxPtr->extent(2) < 0 ) {
                 // Potentially rounding problem.
                 BoundingBox newBbox;
                 AddBox(buildData, start, end, newBbox);
@@ -315,13 +324,14 @@ namespace _462 {
             }
             else {
                 bboxPtr = boxPtr;
-                assert(bboxPtr->extent(0) >= 0);
+                assert(bboxPtr->extent(0) + 1e-3 >= 0);
             }
 
             AddTimeSincePreviousTick(t1);
 
             if (nPrimitives == 1) {
                 buildLeaf(buildData,start,end, orderedPrims,node,*bboxPtr);
+		goto finishUp;
             }
             else {
                 // Compute bound of primitive centroids, choose split dimension _dim_
@@ -738,7 +748,8 @@ finishUp:
     }
 
     uint32_t BVHAccel::getFirstHit(const Packet& packet, const BoundingBox& box, uint32_t active,
-        uint32_t *dirIsNeg, real_t t0, real_t t1, const vector<hitRecord>& records, bool fullRecord) const {
+				   uint32_t *dirIsNeg, real_t t0, real_t t1, 
+				   const vector<hitRecord>& records, bool fullRecord) const {
             Ray active_ray = packet.rays[active];
             Vector3 invDir(1.f / active_ray.d.x, 1.f / active_ray.d.y, 1.f / active_ray.d.z);
             dirIsNeg[0] = invDir.x < 0;
@@ -750,34 +761,26 @@ finishUp:
             if (packet.frustum.isValid && !box.hit(packet.frustum))
                 return packet.size;
 
-            
-            if(fullRecord)
-            {
-                float* low = new float[3];
-                float* high = new float[3];
-                for(int i=0;i<3;i++)
-                {
-                    low[i] = box.lowCoord[i];
-                    high[i] = box.highCoord[i];
-                }
-                int val = ispc::hit(packet.e_x, packet.e_y, packet.e_z, packet.d_x,packet.d_y,packet.d_z, t0, t1, low, high, active+1, packet.size);
-                delete low;
-                delete high;
-                return val;
-            }
-            else
-                for (uint32_t i = active+1; i < packet.size; i++) {
-                    Ray cur_ray = packet.rays[i];
-                    Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
-                    dirIsNeg[0] = invDir.x < 0;
-                    dirIsNeg[1] = invDir.y < 0;
-                    dirIsNeg[2] = invDir.z < 0;
+#ifdef ISPC_RENDER	    
+	    int val = ispc::hit(packet.e_x, packet.e_y, packet.e_z, packet.d_x,packet.d_y,packet.d_z, 
+				t0, t1, (double*)&(box.lowCoord), (double*)&(box.highCoord), 
+				active+1, packet.size, false, NULL);
 
-                    if ( (fullRecord || records[i].t>=1 ) && box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
-                        return i;
-                }
+	    return val;
+#else
+	    for (uint32_t i = active+1; i < packet.size; i++) {
+		Ray cur_ray = packet.rays[i];
+		Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
+		dirIsNeg[0] = invDir.x < 0;
+		dirIsNeg[1] = invDir.y < 0;
+		dirIsNeg[2] = invDir.z < 0;
+
+		if ( (fullRecord || records[i].t>=1 ) && box.hit(invDir, cur_ray.e, t0, t1, dirIsNeg))
+		    return i;
+	    }
 
             return packet.size;
+#endif
     }
 
     uint32_t BVHAccel::getLastHit(const Packet& packet, const BoundingBox& box, uint32_t active,
@@ -788,6 +791,13 @@ finishUp:
             dirIsNeg[1] = invDir.y < 0;
             dirIsNeg[2] = invDir.z < 0;
 
+#ifdef ISPC_RENDER	    
+	    int val = ispc::hitLast(packet.e_x, packet.e_y, packet.e_z, packet.d_x,packet.d_y,packet.d_z, 
+				t0, t1, (double*)&(box.lowCoord), (double*)&(box.highCoord), 
+				active+1, packet.size);
+
+	    return val;
+#else
             for (uint32_t i = packet.size - 1; i > active; i--) {
                 Ray cur_ray = packet.rays[i];
                 Vector3 invDir(1.f / cur_ray.d.x, 1.f / cur_ray.d.y, 1.f / cur_ray.d.z);
@@ -800,6 +810,7 @@ finishUp:
             }
 
             return active+1;
+#endif
     }
 
 
@@ -830,7 +841,6 @@ finishUp:
             }
 
             uint32_t cur_active = getFirstHit(packet, node->bounds, active, dirIsNeg, t0, t1_max, records, fullRecord);
-
 
             if (cur_active < packet.size) {
                 if (node->nPrimitives == 0) {

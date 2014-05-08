@@ -28,10 +28,11 @@ public:
     virtual ~Model();
 
     virtual void render() const;
-	virtual bool hit(const Ray& r, real_t t0, real_t t1,hitRecord& h, bool fullRecord) const;
-	virtual void InitGeometry();
-	BVHAccel* bvh;
-	std::vector<Triangle> triangles;
+    virtual bool hit(const Ray& r, real_t t0, real_t t1,hitRecord& h, bool fullRecord) const;
+    virtual void hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1, hitRecord* hs, bool fullRecord) const;
+    virtual void InitGeometry();
+    BVHAccel* bvh;
+    std::vector<Triangle> triangles;
 };
 
 

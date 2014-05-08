@@ -16,7 +16,7 @@ Triangle::Triangle()
     vertices[1].material = 0;
     vertices[2].material = 0;
 	
-	simple = false;
+    simple = false;
 }
 
 Triangle::~Triangle() { }
@@ -129,6 +129,53 @@ void Triangle::InitGeometry()
 	for(int i=0;i<3;i++)
 		bb.AddPoint(project(mat*Vector4(vertices[i].position,1)));
 }
+
+void Triangle::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1Ptr, hitRecord* hs, bool fullRecord) const {
+    Matrix4 nm = this->invMat;
+    nm(3,0)=0;
+    nm(3,1)=0;
+    nm(3,2)=0;
+
+    // TODO: static
+    float *t_values, *texCoord_x, *texCoord_y, 
+	*norm_x, *norm_y, *norm_z;
+
+    t_values = new float[end - start];
+    texCoord_x = new float[end - start];
+    texCoord_y = new float[end - start];
+    norm_x = new float[end - start];
+    norm_y = new float[end - start];
+    norm_z = new float[end - start];
+
+    int *hit_flag = new int[end - start];
+
+    ispc::hit_triangle(packet.e_x, packet.e_y, packet.e_z, packet.d_x, packet.d_y, packet.d_z,
+		       t0, t1Ptr, (double*)&vertices[0], (double*)&(this->invMat), (double*)&nm, 
+		       start, end, (int)fullRecord, 
+		       t_values, hit_flag, texCoord_x, texCoord_y, norm_x, norm_y, norm_z);
+    const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
+
+    for (int i = start; i < end; i++) {
+	if (hit_flag[i]) {
+	    hs[i].t = t_values[i];
+	    Vector2 texCoord(texCoord_x[i], texCoord_y[i]);
+
+	    // TODO: interpolation
+	    //if(!simple)
+		//getMaterialProperties(hs[i].mp, mult, texCoord, materials);
+	    //else
+	    getMaterialProperties(hs[i].mp,texCoord, materials[0]);
+	    hs[i].n = Vector3(norm_x[i], norm_y[i], norm_z[i]);
+	}
+    }
+
+    delete[] t_values;
+    delete[] texCoord_x;
+    delete[] texCoord_y;
+    delete[] norm_x;
+    delete[] norm_y;
+    delete[] norm_z;
+}
 /*
 Ray tRay = r.transform(invMat);
 	real_t mult[3];
@@ -146,79 +193,78 @@ Ray tRay = r.transform(invMat);
 */
 bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& hR, bool fullRecord) const
 {
-	Ray tRay = r.transform(invMat);
+    Ray tRay = r.transform(invMat);
     
-	real_t mult[3];
+    real_t mult[3];
 
-	Vector3 a_minus_b = vertices[0].position - vertices[1].position;
-	Vector3 a_minus_c = vertices[0].position - vertices[2].position;
-	Vector3 a_minus_e = vertices[0].position - tRay.e;
+    Vector3 a_minus_b = vertices[0].position - vertices[1].position;
+    Vector3 a_minus_c = vertices[0].position - vertices[2].position;
+    Vector3 a_minus_e = vertices[0].position - tRay.e;
 
-	real_t a = a_minus_b.x;
-	real_t b = a_minus_b.y;
-	real_t c = a_minus_b.z;
-	real_t d = a_minus_c.x;
-	real_t e = a_minus_c.y;
-	real_t f = a_minus_c.z;
-	real_t g = tRay.d.x;
-	real_t h = tRay.d.y;
-	real_t i = tRay.d.z;
-	real_t j = a_minus_e.x;
-	real_t k = a_minus_e.y;
-	real_t l = a_minus_e.z;
+    real_t a = a_minus_b.x;
+    real_t b = a_minus_b.y;
+    real_t c = a_minus_b.z;
+    real_t d = a_minus_c.x;
+    real_t e = a_minus_c.y;
+    real_t f = a_minus_c.z;
+    real_t g = tRay.d.x;
+    real_t h = tRay.d.y;
+    real_t i = tRay.d.z;
+    real_t j = a_minus_e.x;
+    real_t k = a_minus_e.y;
+    real_t l = a_minus_e.z;
 
-	real_t ei_minus_hf = e * i - h * f;
-	real_t gf_minus_di = g * f - d * i;
-	real_t dh_minus_eg = d * h - e * g;
-	real_t ak_minus_jb = a * k - j * b;
-	real_t jc_minus_al = j * c - a * l;
-	real_t bl_minus_kc = b * l - k * c;
+    real_t ei_minus_hf = e * i - h * f;
+    real_t gf_minus_di = g * f - d * i;
+    real_t dh_minus_eg = d * h - e * g;
+    real_t ak_minus_jb = a * k - j * b;
+    real_t jc_minus_al = j * c - a * l;
+    real_t bl_minus_kc = b * l - k * c;
 
-	real_t M = a * ei_minus_hf + b * gf_minus_di + c * dh_minus_eg;
-	real_t time = (f * ak_minus_jb + e * jc_minus_al + d * bl_minus_kc) / -M;
-	if (time <= t0 || time >= t1) {
-		return false;
-	}
+    real_t M = a * ei_minus_hf + b * gf_minus_di + c * dh_minus_eg;
+    real_t time = (f * ak_minus_jb + e * jc_minus_al + d * bl_minus_kc) / -M;
+    if (time <= t0 || time >= t1) {
+	return false;
+    }
 
-	real_t beta = (j * ei_minus_hf + k * gf_minus_di + l * dh_minus_eg) / M;
-	if (beta < 0 || beta > 1)
-		return false;
+    real_t beta = (j * ei_minus_hf + k * gf_minus_di + l * dh_minus_eg) / M;
+    if (beta < 0 || beta > 1)
+	return false;
 
-	real_t gamma = (i * ak_minus_jb + h * jc_minus_al + g * bl_minus_kc) / M;
-	if (gamma < 0 || gamma > 1 - beta)
-		return false;
+    real_t gamma = (i * ak_minus_jb + h * jc_minus_al + g * bl_minus_kc) / M;
+    if (gamma < 0 || gamma > 1 - beta)
+	return false;
 
     hR.t = time;
 
     if (!fullRecord)
-		return true;
+	return true;
 
     mult[0] = 1-beta-gamma;
-	mult[1] = beta;
+    mult[1] = beta;
     mult[2] = gamma;
 
-	Vector2 texCoord(0,0);
-	for(int i=0;i<3;i++)
-		texCoord += mult[i]*vertices[i].tex_coord;
+    Vector2 texCoord(0,0);
+    for(int i=0;i<3;i++)
+	texCoord += mult[i]*vertices[i].tex_coord;
 
-	texCoord[0] = fmod(texCoord[0],1.0);
-	texCoord[1] = fmod(texCoord[1],1.0);
-	if(texCoord[0]<0) texCoord[0]+=1;
-	if(texCoord[1]<0) texCoord[0]+=1;
+    texCoord[0] = fmod(texCoord[0],1.0);
+    texCoord[1] = fmod(texCoord[1],1.0);
+    if(texCoord[0]<0) texCoord[0]+=1;
+    if(texCoord[1]<0) texCoord[0]+=1;
 	
-	const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
-	if(!simple)
-		getMaterialProperties(hR.mp, mult,texCoord, materials);
-	else
-		getMaterialProperties(hR.mp,texCoord, materials[0]);
+    const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
+    if(!simple)
+	getMaterialProperties(hR.mp, mult, texCoord, materials);
+    else
+	getMaterialProperties(hR.mp,texCoord, materials[0]);
 
-	hR.n = Vector3(0,0,0);
-	for(int i=0;i<3;i++)
-	    hR.n += mult[i]*vertices[i].normal;
-	hR.n = normalize( normMat*hR.n);
-
+    hR.n = Vector3(0,0,0);
+    for(int i=0;i<3;i++)
+	hR.n += mult[i]*vertices[i].normal;
+    hR.n = normalize( normMat*hR.n);
 	
-	return true;
+    return true;
 }
 
 } /* _462 */

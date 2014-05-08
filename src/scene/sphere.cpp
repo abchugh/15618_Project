@@ -108,6 +108,11 @@ void Sphere::InitGeometry()
 		bb.AddPoint(project(mat*Vector4(endPoints[i],1)));
 }
 
+    // TODO: sphere's hitpacket
+void Sphere::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1Ptr, hitRecord* hs, bool fullRecord) const {
+
+}
+
 bool Sphere::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord & h, bool fullRecord) const
 {
 	if(!checkBoundingBoxHit(r,t0,t1))

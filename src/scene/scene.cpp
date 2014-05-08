@@ -192,7 +192,6 @@ namespace _462 {
                 locs.push_back(loc);
                 NDotLs.push_back(NDotL);
                 indices[numShadowRays++] = i;
-
                 
             }
             
@@ -201,6 +200,12 @@ namespace _462 {
             {
                 pkt.rays[i].e = p[ indices[i] ];
                 pkt.rays[i].d = locs[i] - p[ indices[i] ];
+		pkt.e_x[i] = pkt.rays[i].e[0];
+		pkt.e_y[i] = pkt.rays[i].e[1];
+		pkt.e_z[i] = pkt.rays[i].e[2];
+		pkt.d_x[i] = pkt.rays[i].d[0];
+		pkt.d_y[i] = pkt.rays[i].d[1];
+		pkt.d_z[i] = pkt.rays[i].d[2];
             }
             vector<hitRecord> hShadow(numShadowRays);
             tree->hit(pkt, SLOP, 1, hShadow, false);

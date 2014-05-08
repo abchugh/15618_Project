@@ -3,4 +3,7 @@
 
 //#define ISPC_AOS
 #define ISPC_SOA
+
+#define ISPC_RENDER
+
 #endif
