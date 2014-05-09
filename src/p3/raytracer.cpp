@@ -293,7 +293,7 @@ namespace _462 {
                             continue;
 
                         Color3 cur_color = Color3::Black();
-                        vector<Color3> packet_color(packet_ray_size);
+                        Color3* packet_color = new Color3[packet_ray_size];
 
                         // Shoot packet one by one to the same pixel
                         for (size_t i = 0; i < num_packet; i++) {
@@ -329,10 +329,15 @@ namespace _462 {
         reset();
         time_t start = SDL_GetTicks();
         // Work should be balanced automatically.
+		//Color3* colorBuffer = new Color3[width*height];
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
         for (int work_count = 0; work_count < work_num_x * work_num_y; work_count++) {
             size_t cur_work_y = work_count / work_num_x;
             size_t cur_work_x = work_count - cur_work_y * work_num_x;
+
+			
+                    // Get color here. (func in scene)
+                    Color3* packet_color = new Color3[packet_width_pixel * packet_width_pixel * num_samples];
 
             // All numbers should have been rounded
             for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
@@ -349,8 +354,6 @@ namespace _462 {
 
                     tc[omp_get_thread_num()] += SDL_GetTicks() -tt;
 
-                    // Get color here. (func in scene)
-                    vector<Color3> packet_color(packet_width_pixel * packet_width_pixel * num_samples);
                     
                     std::vector< std::vector<real_t> > refractiveStack;
                     for(int i=0;i<packet.size;i++)
@@ -360,11 +363,21 @@ namespace _462 {
                         refractiveStack.push_back(rstack);
                     }
 
-                    scene->getColors(packet, refractiveStack,packet_color);
+                    scene->getColors(packet, refractiveStack, packet_color);
 
                     td[omp_get_thread_num()] += SDL_GetTicks() -tt;
+					if(num_samples==1)
+					{
+						for (size_t y = 0; y < packet_width_pixel; y++) {
+                        for (size_t x = 0; x < packet_width_pixel; x++) {
+							packet_color[y * packet_width_pixel * num_samples +  x * num_samples].to_array(&buffer[4 * ((p_y + y) * width + p_x + x)]);
+						}
+						}
+					}
+					else
                     for (size_t y = 0; y < packet_width_pixel; y++) {
                         for (size_t x = 0; x < packet_width_pixel; x++) {
+
                             Color3 cur_color = Color3::Black();
                             if ((p_x + x) >= width || (p_y + y) >= height)
                                 continue;
@@ -381,7 +394,11 @@ namespace _462 {
                     te[omp_get_thread_num()] += SDL_GetTicks() -tt;
                 }
             }
+
+                    // Get color here. (func in scene)
+			delete[] packet_color;
         }
+/*
         for(int i=0;i<20;i++)
         {
             if(ta[i]==0) break;
@@ -392,11 +409,11 @@ namespace _462 {
         {
             if(tb[i]==0) break;
             printf("%d ", tb[i]-ta[i]);
-        }
+        }*/
         printf("\n");
 
         time_t end = SDL_GetTicks();
-        printf("ta tb... = %d %d %d \n", sum(ta), sum(tb)-sum(ta), sum(tc));//sum(td)-sum(tc) = tb), sum(te)-sum(td) negligible
+        printf("ta tb... = %d %d %d  %d\n", sum(ta), sum(tb), sum(tc), sum(td)-sum(tc), sum(te)-sum(td));//sum(td)-sum(tc) = tb), sum(te)-sum(td) negligible
     }
 
 

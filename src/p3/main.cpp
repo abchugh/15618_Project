@@ -577,7 +577,7 @@ static bool parse_args( Options* opt, int argc, char* argv[] )
 	opt->height = DEFAULT_HEIGHT;
 	opt->num_samples = 5;
 	opt->num_glossy_reflection_samples = 0;
-	opt->num_threads = 8;
+	opt->num_threads = 12;
 	opt->pixel_width = 32;
 	opt->packet_width_ray = 16;
 

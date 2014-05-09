@@ -202,11 +202,11 @@ namespace _462 {
         void add_light( const SphereLight& l );
         static const int maxRecursionDepth;
         Color3 getColor(const Ray& r, std::vector<real_t> refractiveStack, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
-        void getColors(const Packet& packet, std::vector<std::vector<real_t> > refractiveStack, std::vector<Color3>& col, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
+        void getColors(const Packet& packet, std::vector<std::vector<real_t> > refractiveStack, Color3* col, int depth = maxRecursionDepth, real_t t0 = 0, real_t t1 = 1e30) const;
 
         bool hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
         Color3 calculateDiffuseColor(Vector3 p, Vector3 n, Color3 kd)const;
-        void calculateDiffuseColors(std::vector<Vector3>& p, std::vector<hitRecord>& h, std::vector<Color3>& col) const;
+        void calculateDiffuseColors(std::vector<Vector3>& p, std::vector<hitRecord>& h, Color3* col) const;
 
         void InitGeometry();
         void buildBVH();

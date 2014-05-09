@@ -168,7 +168,7 @@ namespace _462 {
     //n,     kd
     //h[i].n,h[i].mp.diffuse
     
-    void Scene::calculateDiffuseColors(vector<Vector3>& p,vector<hitRecord>& h,vector<Color3>& col) const
+    void Scene::calculateDiffuseColors(vector<Vector3>& p,vector<hitRecord>& h, Color3* col) const
     {
         int numRays = p.size();
         
@@ -200,15 +200,18 @@ namespace _462 {
             {
                 pkt.rays[i].e = p[ indices[i] ];
                 pkt.rays[i].d = locs[i] - p[ indices[i] ];
-		pkt.e_x[i] = pkt.rays[i].e[0];
-		pkt.e_y[i] = pkt.rays[i].e[1];
-		pkt.e_z[i] = pkt.rays[i].e[2];
-		pkt.d_x[i] = pkt.rays[i].d[0];
-		pkt.d_y[i] = pkt.rays[i].d[1];
-		pkt.d_z[i] = pkt.rays[i].d[2];
+                pkt.e_x[i] = pkt.rays[i].e[0];
+                pkt.e_y[i] = pkt.rays[i].e[1];
+                pkt.e_z[i] = pkt.rays[i].e[2];
+                pkt.d_x[i] = pkt.rays[i].d[0];
+                pkt.d_y[i] = pkt.rays[i].d[1];
+                pkt.d_z[i] = pkt.rays[i].d[2];
             }
             vector<hitRecord> hShadow(numShadowRays);
+
+            time_t startTime = SDL_GetTicks();
             tree->hit(pkt, SLOP, 1, hShadow, false);
+            tb[omp_get_thread_num()] += SDL_GetTicks()-startTime;
             
             for(int i=0;i<numShadowRays;i++)
             {
@@ -316,12 +319,13 @@ namespace _462 {
         }
     }
 
-    void Scene::getColors(const Packet& packet, std::vector<std::vector<real_t> > refractiveStack, std::vector<Color3>& col, int depth, real_t t0, real_t t1) const 
+    void Scene::getColors(const Packet& packet, std::vector<std::vector<real_t> > refractiveStack, Color3* col, int depth, real_t t0, real_t t1) const 
     {
         vector<hitRecord> h(packet.size);
 
+        time_t startTime = SDL_GetTicks();
         tree->hit(packet, t0, t1, h, true);
-        
+        ta[omp_get_thread_num()] += SDL_GetTicks()-startTime;
         //Add the ambient component
         
         vector<Vector3> p(packet.size);
@@ -331,9 +335,10 @@ namespace _462 {
                 col[i] = Scene::background_color;
             else
             {
-                col[i] = Color3(0,0,0);
                 if(h[i].mp.refractive_index == 0)
-                    col[i] += Scene::ambient_light*h[i].mp.ambient;
+                    col[i] = Scene::ambient_light*h[i].mp.ambient;
+				else				
+	                col[i] = Color3(0,0,0);
                 p[i] = packet.rays[i].e + h[i].t*packet.rays[i].d;
             }
         }
