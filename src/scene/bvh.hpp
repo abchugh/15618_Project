@@ -23,7 +23,6 @@ namespace _462 {
 #endif
 
 #define CENTROID_BASED
-#define NUM_IN_PRE_QUEUE 11
     //#define ENABLED_TIME_LOGS
     const int MAX_THREADS = 128;
 

@@ -22,7 +22,7 @@
 using namespace std;
 
 namespace _462 {
-    extern time_t ta[MAX_THREADS], tb[MAX_THREADS];
+    extern time_t ta[MAX_THREADS], tb[MAX_THREADS],ts[MAX_THREADS], tt[MAX_THREADS], tu[MAX_THREADS];
     time_t tc[MAX_THREADS],td[MAX_THREADS],te[MAX_THREADS],tf[MAX_THREADS];
     static time_t sum(time_t arr[])
     {
@@ -62,7 +62,7 @@ namespace _462 {
     // random real_t in [0, 1)
 	static unsigned long _xR=123456789, _yR =362436069, _zR=521288629;
 
-	unsigned long xorshf96(void) {          //period 2^96-1
+	static unsigned long xorshf96(void) {          //period 2^96-1
 	unsigned long t;
 		_xR ^= _xR << 16;
 		_xR ^= _xR >> 5;
@@ -336,8 +336,8 @@ namespace _462 {
             size_t cur_work_x = work_count - cur_work_y * work_num_x;
 
 			
-                    // Get color here. (func in scene)
-                    Color3* packet_color = new Color3[packet_width_pixel * packet_width_pixel * num_samples];
+           // Get color here. (func in scene)
+           Color3* packet_color = new Color3[packet_width_pixel * packet_width_pixel * num_samples];
 
             // All numbers should have been rounded
             for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
@@ -363,18 +363,12 @@ namespace _462 {
                         refractiveStack.push_back(rstack);
                     }
 
+                    td[omp_get_thread_num()] += SDL_GetTicks() -tt;
                     scene->getColors(packet, refractiveStack, packet_color);
 
-                    td[omp_get_thread_num()] += SDL_GetTicks() -tt;
-					if(num_samples==1)
-					{
-						for (size_t y = 0; y < packet_width_pixel; y++) {
-                        for (size_t x = 0; x < packet_width_pixel; x++) {
-							packet_color[y * packet_width_pixel * num_samples +  x * num_samples].to_array(&buffer[4 * ((p_y + y) * width + p_x + x)]);
-						}
-						}
-					}
-					else
+                    te[omp_get_thread_num()] += SDL_GetTicks() -tt;
+
+					
                     for (size_t y = 0; y < packet_width_pixel; y++) {
                         for (size_t x = 0; x < packet_width_pixel; x++) {
 
@@ -391,29 +385,29 @@ namespace _462 {
                         }
                     }
 
-                    te[omp_get_thread_num()] += SDL_GetTicks() -tt;
+                    tf[omp_get_thread_num()] += SDL_GetTicks() -tt;
                 }
             }
 
                     // Get color here. (func in scene)
 			delete[] packet_color;
         }
-/*
+
         for(int i=0;i<20;i++)
         {
-            if(ta[i]==0) break;
-            printf("%d ", ta[i]);
+            if(te[i]==0) break;
+            printf("%d ", te[i]);
         }
         printf("\n");
-        for(int i=0;i<20;i++)
+        /*for(int i=0;i<20;i++)
         {
             if(tb[i]==0) break;
             printf("%d ", tb[i]-ta[i]);
-        }*/
-        printf("\n");
+        }
+        printf("\n");*/
 
         time_t end = SDL_GetTicks();
-        printf("ta tb... = %d %d %d  %d\n", sum(ta), sum(tb), sum(tc), sum(td)-sum(tc), sum(te)-sum(td));//sum(td)-sum(tc) = tb), sum(te)-sum(td) negligible
+        printf("ta tb... = P=%d/%d S=%d/%d Pack=%d Data=%d stack=%d %d %d\n", sum(ta), sum(te)-sum(td), sum(tb), sum(ts), sum(tc), sum(tf) - sum(te), sum(td)-sum(tc), sum(tt), sum(tu));//sum(td)-sum(tc) = tb), sum(te)-sum(td) negligible
     }
 
 

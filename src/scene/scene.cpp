@@ -18,7 +18,7 @@ using namespace std;
 namespace _462 {
 
     const real_t SLOP = 1e-5;
-    time_t ta[MAX_THREADS], tb[MAX_THREADS];
+    time_t ta[MAX_THREADS], tb[MAX_THREADS], ts[MAX_THREADS], tt[MAX_THREADS], tu[MAX_THREADS];
 
     Geometry::Geometry():
         position(Vector3::Zero()),
@@ -167,13 +167,33 @@ namespace _462 {
 
     //n,     kd
     //h[i].n,h[i].mp.diffuse
-    
+    	static unsigned long _xR=123456789, _yR =362436069, _zR=521288629;
+
+	static unsigned long xorshf96(void) {          //period 2^96-1
+	unsigned long t;
+		_xR ^= _xR << 16;
+		_xR ^= _xR >> 5;
+		_xR ^= _xR << 1;
+
+	   t = _xR;
+	   _xR = _yR;
+	   _yR = _zR;
+	   _zR = t ^ _xR ^ _yR;
+
+	  return _zR;
+	}
+    static inline real_t random()
+    {
+        return (real_t) xorshf96()/(float)(~0UL);
+    }
+
     void Scene::calculateDiffuseColors(vector<Vector3>& p,vector<hitRecord>& h, Color3* col) const
     {
         int numRays = p.size();
         
         int indices[1024];
         assert(numRays<=1024);
+		time_t startTime;
         for(unsigned int l=0;l<point_lights.size();l++)
         {
             int numShadowRays = 0;
@@ -181,9 +201,11 @@ namespace _462 {
             locs.reserve(numRays);
             vector<real_t> NDotLs;
             NDotLs.reserve(numRays);
+
+            startTime = SDL_GetTicks();
             for(int i=0;i<numRays;i++) if(h[i].t>=0)//check if this actually hit something
             {
-                real_t x = random_gaussian(), y = random_gaussian(), z = random_gaussian();
+                real_t x = random(), y = random(), z = random();
                 Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
                 Vector3 L = normalize(loc-p[i]);
                 real_t NDotL = dot(h[i].n,L);
@@ -194,7 +216,7 @@ namespace _462 {
                 indices[numShadowRays++] = i;
                 
             }
-            
+			
             Packet pkt(numShadowRays);
             for(int i=0;i<numShadowRays;i++)
             {
@@ -207,12 +229,16 @@ namespace _462 {
                 pkt.d_y[i] = pkt.rays[i].d[1];
                 pkt.d_z[i] = pkt.rays[i].d[2];
             }
+            tt[omp_get_thread_num()] += SDL_GetTicks()-startTime;
+
             vector<hitRecord> hShadow(numShadowRays);
 
-            time_t startTime = SDL_GetTicks();
+            startTime = SDL_GetTicks();
             tree->hit(pkt, SLOP, 1, hShadow, false);
             tb[omp_get_thread_num()] += SDL_GetTicks()-startTime;
             
+			
+            startTime = SDL_GetTicks();
             for(int i=0;i<numShadowRays;i++)
             {
                 //We just want to check if something is between the point and the source
@@ -224,6 +250,7 @@ namespace _462 {
                     col[ indices[i] ] += h[indices[i]].mp.diffuse*c*NDotLs[ i ];
                 }
             }
+            tt[omp_get_thread_num()] += SDL_GetTicks()-startTime;
             //average over the simulations
         }
     }
@@ -319,7 +346,7 @@ namespace _462 {
         }
     }
 
-    void Scene::getColors(const Packet& packet, std::vector<std::vector<real_t> > refractiveStack, Color3* col, int depth, real_t t0, real_t t1) const 
+    void Scene::getColors(const Packet& packet, std::vector<std::vector<real_t> >& refractiveStack, Color3* col, int depth, real_t t0, real_t t1) const 
     {
         vector<hitRecord> h(packet.size);
 
@@ -328,6 +355,7 @@ namespace _462 {
         ta[omp_get_thread_num()] += SDL_GetTicks()-startTime;
         //Add the ambient component
         
+        startTime = SDL_GetTicks();
         vector<Vector3> p(packet.size);
         for(int i=0;i<packet.size;i++)
         {
@@ -342,11 +370,16 @@ namespace _462 {
                 p[i] = packet.rays[i].e + h[i].t*packet.rays[i].d;
             }
         }
+
+        tu[omp_get_thread_num()] += SDL_GetTicks()-startTime;
+
+        startTime = SDL_GetTicks();
         calculateDiffuseColors(p,h,col);
+        ts[omp_get_thread_num()] += SDL_GetTicks()-startTime;
         
         for(int i=0; i<packet.size;i++) if(h[i].t>=0)
         {
-            if(depth>0)
+            if(0)//depth>0)
             {
                 real_t reflectedRatio;
                 Color3 reflectedColor(0,0,0);

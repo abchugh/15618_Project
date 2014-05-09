@@ -102,7 +102,7 @@ namespace _462 {
         pq.push(rootData);
 
         time_t endTime = SDL_GetTicks();
-		omp_set_num_threads(12);
+
         int thread_count = omp_get_max_threads();
 
         for (int i = 0; i < thread_count; i++) {
@@ -113,7 +113,7 @@ namespace _462 {
         poolPtr[thread_count] = new BuildNodePool(40, 10);
 		
         printf("Started parallel node phase at %ld \n", endTime-startTime);
-        while(pq.size()<=NUM_IN_PRE_QUEUE)//omp_get_max_threads())
+        while(pq.size()<=omp_get_max_threads()-1)
         {
             queueData data = pq.top();
             if(data.end-data.start<=100)break;
@@ -717,9 +717,8 @@ finishUp:
                 swap(child1Data, child2Data);
 
             pq.push(child1Data);
-            if(child2Data.end - child2Data.start > 100 && pq.size()<=NUM_IN_PRE_QUEUE)
-                fastRecursiveBuild(buildData, child2Data.start, child2Data.end, &child2Data.box, totalNodes,
-                orderedPrims, child2Data.parent, child2Data.isFirstChild);
+            if(child2Data.end - child2Data.start > 100 && pq.size()<=omp_get_max_threads()-1)
+                fastRecursiveBuild(buildData, child2Data.start, child2Data.end, &child2Data.box, totalNodes, orderedPrims, child2Data.parent, child2Data.isFirstChild);
             else
                 pq.push(child2Data);
 
