@@ -8,11 +8,7 @@ float sinc1D(float v, float tau) {
     float x = (v > 0) ? v : -v;
     if (x < 1e-5) return 1.f;
     if (x > 1.)   return 0.f;
-<<<<<<< HEAD
-    x *= M_PI;
-=======
     x *= PI;
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     float sinc = std::sin(x) / x;
     float lanczos = std::sin(x * tau) / (x * tau);
     return sinc * lanczos;
@@ -20,13 +16,8 @@ float sinc1D(float v, float tau) {
 
 
 float SincFilter::evaluate(float x, float y) {
-<<<<<<< HEAD
-    float shift_x = (x - width_x) / (2 * width_x);
-    float shift_y = (y - width_y) / (2 * width_y);
-=======
     float shift_x = (x - width_x) / (width_x);
     float shift_y = (y - width_y) / (width_y);
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     float g_x = sinc1D(shift_x, tau);
     float g_y = sinc1D(shift_y, tau);
 

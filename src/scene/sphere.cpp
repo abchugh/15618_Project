@@ -139,7 +139,7 @@ Vector3 Sphere::sample(const Vector3 &p, float r1, float r2, float c, Vector3 *n
 	float v1 = dot(x, sample_n), v2 = dot(x, y), v3 = dot(y, sample_n);
 	float test = squared_length(position - p);
 
-	float cos_max = std::sqrtf(1.f - radius * radius / squared_length(position - p));
+	float cos_max = std::sqrt(1.f - radius * radius / squared_length(position - p));
 	Vector3 p_cone = uniform_sample_cone(r1, r2, cos_max, x, y, sample_n);
 	Ray r(p, p_cone);
 
@@ -159,7 +159,7 @@ float Sphere::pdf(const Vector3 &p, const Vector3 &wi) {
 	if (squared_length(position - p) < radius * radius) {
 		return uniform_sample_sphere_pdf();
 	}
-	float cos_max = std::sqrtf(1.f - radius * radius / squared_length(position - p));
+	float cos_max = std::sqrt(1.f - radius * radius / squared_length(position - p));
 	return uniform_sample_cone_pdf(cos_max);
 }
 

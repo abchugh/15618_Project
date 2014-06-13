@@ -32,9 +32,9 @@ void Color3::to_array( unsigned char arr[4] ) const
 void Color3::to_array_gamma( unsigned char arr[4], float a, float gamma ) const {
 	// clamp values
 	Color3 self = *this;
-	self.r = a * std::powf(self.r, gamma);
-	self.g = a * std::powf(self.g, gamma);
-	self.b = a * std::powf(self.b, gamma);
+	self.r = a * std::pow(self.r, gamma);
+	self.g = a * std::pow(self.g, gamma);
+	self.b = a * std::pow(self.b, gamma);
 
     Color3 tmp = clamp( self, 0.0, 1.0 );
 

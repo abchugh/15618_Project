@@ -436,11 +436,11 @@ inline Vector3 cross( const Vector3& lhs, const Vector3& rhs ) {
 
 inline void coordinate_system(const Vector3 &v1, Vector3 *v2, Vector3 *v3) {
 	if (std::fabs(v1.x) > std::fabs(v1.y)) {
-		float invLen = 1.f / std::sqrtf((float)(v1.x * v1.x + v1.z * v1.z));
+		float invLen = 1.f / std::sqrt((float)(v1.x * v1.x + v1.z * v1.z));
 		*v2 = Vector3(-v1.z * invLen, 0.f, v1.x * invLen);
 	}
 	else {
-		float invLen = 1.f / std::sqrtf((float)(v1.y * v1.y + v1.z * v1.z));
+		float invLen = 1.f / std::sqrt((float)(v1.y * v1.y + v1.z * v1.z));
 		*v2 = Vector3(0.f, v1.z * invLen, -v1.y * invLen);
 	}
 	*v2 = -*v2;

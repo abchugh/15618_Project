@@ -17,11 +17,7 @@ public:
 
     ~HaltonSampler() { }
 
-<<<<<<< HEAD
-    Sample *getPacketSamples(uint32_t &x, uint32_t &y);
-=======
     Sample *getPacketSamples(uint32_t &x, uint32_t &y, Random462 &rng);
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
 
 private:
     uint32_t current_packet, wanted_packet_num;

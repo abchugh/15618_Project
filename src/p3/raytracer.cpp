@@ -429,7 +429,7 @@ namespace _462 {
 		time_t prev_time = -1;
 		time_t this_time;
 
-//#pragma omp parallel for num_threads(num_threads)
+#pragma omp parallel for num_threads(8)
 		for (int i = 0; i < wanted_packet_num; i++) {
 			int tid = omp_get_thread_num();
 
@@ -687,10 +687,7 @@ namespace _462 {
         else {
 			printf("trace: %d, %d\n", width, height);
 
-			float test_1d[] = {1.f, 1.f, 1.f, 1.f};
-			Distribution1D dis_1d(test_1d, 4);
-			Distribution2D dis_2d(test_1d, 2, 2);
-			
+			/*
 			Matrix3 trans;
 			Vector3 z(0.f, 1.f, 0.f);
 			Vector3 x, y;
@@ -702,14 +699,14 @@ namespace _462 {
 			}
 			InfiniteAreaLight inf_light(Matrix3(x, y, z), sky_ptr);
 			scene->add_light((Light*)&inf_light);
-
+			*/
 			//WhittedIntegrator whitted(4);
 			//whitted.initialize_sampler(scene, sampler_ptr);
-			DirectLightingIntegrator dir_int(scene, SAMPLE_ALL, 4);
-			dir_int.initialize_sampler(scene, sampler_ptr);
-			//PathIntegrator path_int(scene, opt_ptr->sample_depth, opt_ptr->max_depth, opt_ptr->num_per_path);
-			//path_int.initialize_sampler(scene, sampler_ptr);
-			trace_packet_integrator(&dir_int, width, height);
+			//DirectLightingIntegrator dir_int(scene, SAMPLE_ALL, 4);
+			//dir_int.initialize_sampler(scene, sampler_ptr);
+			PathIntegrator path_int(scene, opt_ptr->sample_depth, opt_ptr->max_depth, opt_ptr->num_per_path);
+			path_int.initialize_sampler(scene, sampler_ptr);
+			trace_packet_integrator(&path_int, width, height);
 			//trace_packet(width, height);
 			is_done = true;
 

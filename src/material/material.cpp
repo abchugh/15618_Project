@@ -105,9 +105,9 @@ Color3 Material::get_texture_pixel( int x, int y ) const
 Color3 Material::get_texture_pixel_norm_inv_gamma( real_t x, real_t y ) const {
 	Color3 gamma_color = get_texture_pixel(x * tex_width, (1. - y) * tex_height);
 	gamma_color /= 2.2;
-	gamma_color.r = std::powf(gamma_color.r, 2.4);
-	gamma_color.g = std::powf(gamma_color.g, 2.4);
-	gamma_color.b = std::powf(gamma_color.b, 2.4);
+	gamma_color.r = std::pow(gamma_color.r, 2.4);
+	gamma_color.g = std::pow(gamma_color.g, 2.4);
+	gamma_color.b = std::pow(gamma_color.b, 2.4);
 
 	return gamma_color;
 }

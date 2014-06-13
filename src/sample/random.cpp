@@ -11,7 +11,7 @@ Sample *RandomSampler::getPacketSamples(uint32_t &x, uint32_t &y, Random462 &rng
 		des_packet = current_packet++;
 	}
 #else
-	des_packet = __sync_fetch_and_add(&current, 1);
+	des_packet = __sync_fetch_and_add(&current_packet, 1);
 #endif
 
     if (des_packet >= wanted_packet_num)

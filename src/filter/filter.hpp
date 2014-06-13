@@ -10,11 +10,7 @@ class Filter {
 public:
     Filter(float w_x, float w_y) :
 	width_x(w_x), width_y(w_y), filter_table(NULL),
-<<<<<<< HEAD
-	table_edge(16) { }
-=======
 	table_edge(32) { }
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     ~Filter() {
 	delete filter_table;
     }

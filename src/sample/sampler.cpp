@@ -38,7 +38,7 @@ Distribution1D::Distribution1D(float *func, uint32_t size)
 
 float Distribution1D::sample_continuous(float r, float *pdf) {
 	float* interval = std::lower_bound(cdf, cdf + piece_size + 1, r);
-	uint32_t offset = std::max(0, interval - cdf - 1);
+	uint32_t offset = std::max(0, (int)(interval - cdf - 1));
 	float delta = (r - cdf[offset]) / (cdf[offset + 1] - cdf[offset]);
 	float func = (cdf[offset + 1] - cdf[offset]) * piece_size;
 
@@ -51,7 +51,7 @@ float Distribution1D::sample_continuous(float r, float *pdf) {
 
 uint32_t Distribution1D::sample_discrete(float r, float *pdf) {
 	float* interval = std::lower_bound(cdf, cdf + piece_size + 1, r);
-	uint32_t offset = std::max(0, interval - cdf - 1);
+	uint32_t offset = std::max(0, (int)(interval - cdf - 1));
 	float func = (cdf[offset + 1] - cdf[offset]) * piece_size;
 
 	// cdf[piece_size] = sum (func)

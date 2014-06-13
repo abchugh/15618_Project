@@ -7,12 +7,6 @@
 #include <omp.h>
 
 #include "math/math.hpp"
-<<<<<<< HEAD
-#include "scene/bvh.hpp"
-
-namespace _462 {
-
-=======
 #include "math/vector.hpp"
 #include "scene/bvh.hpp"
 #include "math/random462.hpp"
@@ -71,31 +65,31 @@ inline Vector3 concentric_sample_disk(float r1, float r2) {
         }
     }
     theta *= PI / 4.f;
-    result.x = r * cosf(theta);
-    result.y = r * sinf(theta);
+    result.x = r * cos(theta);
+    result.y = r * sin(theta);
 
 	return result;
 }
 
 inline Vector3 uniform_sample_sphere(float r1, float r2) {
 	float z = 1.f - 2.f * r1;
-	float r = std::sqrtf(1.f - z * z);
+	float r = std::sqrt(1.f - z * z);
 	float phi = 2.f * PI * r2;
 	
-	return Vector3(r * std::cosf(phi), r * std::sinf(phi), z);
+	return Vector3(r * std::cos(phi), r * std::sin(phi), z);
 }
 
 inline Vector3 uniform_sample_cone(float r1, float r2, float cos, 
 								   Vector3 x, Vector3 y, Vector3 z) {
 	float costheta = (1.f - r1) + r1 * cos;
-    float sintheta = sqrtf(1.f - costheta*costheta);
+    float sintheta = sqrt(1.f - costheta*costheta);
     float phi = r2 * 2.f * PI;
-    return std::cosf(phi) * sintheta * x + std::sinf(phi) * sintheta * y + costheta * z;
+    return std::cos(phi) * sintheta * x + std::sin(phi) * sintheta * y + costheta * z;
 }
 
 inline Vector2 uniform_sample_triangle(float r1, float r2) {
 	Vector2 result;
-	float sqrt1 = std::sqrtf(r1);
+	float sqrt1 = std::sqrt(r1);
 	result.x = 1 - sqrt1;
 	result.y = r2 * sqrt1;
 
@@ -112,7 +106,7 @@ inline float uniform_sample_cone_pdf(float cos) {
 
 inline Vector3 cos_sampled_hemisphere(float r1, float r2) {
 	Vector3 result = concentric_sample_disk(r1, r2);
-	result.z = std::sqrtf(1.f - result.x * result.x - result.y * result.y);
+	result.z = std::sqrt(1.f - result.x * result.x - result.y * result.y);
 
 	return result;
 }
@@ -152,7 +146,6 @@ private:
 	std::vector<Distribution1D*> conditionals;
 };
 
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
 struct Sample {
     float x, y;
 };
@@ -160,51 +153,6 @@ struct Sample {
 class SampleSet {
 public:
     
-<<<<<<< HEAD
-    SampleSet() : samples(NULL), sample_capacity(0), current(0) { }
-    ~SampleSet() {
-	current = 0;
-	_aligned_free(samples);
-    }
-
-    void add1D(uint32_t oneD) {
-	oneD_num.push_back(oneD);
-    }
-
-    void add2D(uint32_t twoD) {
-	twoD_num.push_back(twoD);
-    }
-
-    void allocateSamples() {
-	uint32_t count = 0;
-
-	for (int i = 0; i < oneD_num.size(); i++) {
-	    count += oneD_num[i];
-	}
-
-	for (int i = 0; i < twoD_num.size(); i++) {
-	    count += twoD_num[i] * 2;
-	}
-
-	sample_size = oneD_num.size() + twoD_num.size() * 2;
-
-	samples = (float*)memalign(16, sizeof(float) * count);
-	sample_capacity = count;
-    }
-
-    Sample *addSample(float *oneD, float *twoD) {
-	uint32_t des = 0;
-
-	des = __sync_fetch_and_add(&current, 1);
-
-	assert(des < sample_capacity);
-
-	memcpy(samples + sample_size * des, oneD, sizeof(float) * oneD_num.size());
-	memcpy(samples + sample_size * des + oneD_num.size(), 
-	       twoD, sizeof(float) * twoD_num.size() * 2);
-	
-	return (Sample*)(samples + sample_size * des);
-=======
     SampleSet(uint32_t capacity)
 		: samples(NULL), sample_capacity(capacity), current(0), current_one_offset(0),
 		current_two_offset(0), max_set_size(800 * 600 * 4) { }
@@ -277,46 +225,12 @@ public:
 			   twoD, sizeof(float) * twoD_num.size() * 2);
 	
 		return (Sample*)(samples + sample_size * des);
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     }
 
     // oneD : one1...
     //        one2...
     Sample *addSamples(float *oneD, float *twoD, uint32_t count) {
-<<<<<<< HEAD
 	uint32_t des = 0;
-
-	des = __sync_fetch_and_add(&current, count);
-
-	assert(des < sample_capacity);
-
-	uint32_t oneD_size = oneD_num.size();
-	uint32_t twoD_size = twoD_num.size();
-
-	for (int i = 0; i < count; i++) {
-	    for (int j = 0; j < oneD_size; j++)
-		samples[sample_size * (des + i) + j] = oneD[j * count + i];
-	    for (int j = 0; j < twoD_size; j++) {
-		samples[oneD_size + sample_size * (des + i) + 2 * j] = twoD[j * count * 2 + 2 * i];
-		samples[oneD_size + sample_size * (des + i) + 2 * j + 1] = 
-		    twoD[j * count * 2 + 2 * i + 1];
-	    }
-	}
-	
-	return (Sample*)(samples + sample_size * des);
-    }
-
-    Sample *addEmptySamples(uint32_t count) {
-	uint32_t des = -1;
-
-	des = __sync_fetch_and_add(&current, count);
-
-	assert(des >= 0);
-	assert(des < sample_capacity);
-	
-	return (Sample*)(samples + sample_size * des);
-=======
-		uint32_t des = 0;
 
 	#ifdef _WINDOWS
 	#pragma omp critical
@@ -380,7 +294,6 @@ public:
 		assert(des < sample_capacity);
 	
 		return (Sample*)(samples + sample_size * des);
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     }
 
     std::vector<uint32_t> oneD_num;
@@ -391,13 +304,10 @@ public:
 
 private:
     uint32_t current;
-<<<<<<< HEAD
-=======
 	uint32_t current_one_offset;
 	uint32_t current_two_offset;
 	const uint32_t max_set_size;
 	uint32_t alloc_size;
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
 };
 
 class Sampler {
@@ -406,25 +316,14 @@ public:
     Sampler (uint32_t width, uint32_t height, uint32_t p_width_x, uint32_t p_width_y,
 	     uint32_t pixel_num_sample) :
 	width(width), height(height), p_width_x(p_width_x), p_width_y(p_width_y),
-<<<<<<< HEAD
-	pixel_num_sample(pixel_num_sample) {
-	p_count_x = width / p_width_x;
-	p_count_y = height / p_width_y;
-	sampleset.add2D(width * height * pixel_num_sample);
-	sampleset.allocateSamples();
-=======
-		pixel_num_sample(pixel_num_sample), sampleset(width * height * pixel_num_sample) {
+	pixel_num_sample(pixel_num_sample), sampleset(width * height * pixel_num_sample) {
 		p_count_x = width / p_width_x;
 		p_count_y = height / p_width_y;
 		sampleset.add2Dxy();
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     }
 
     virtual ~Sampler() { }
 
-<<<<<<< HEAD
-    virtual Sample *getPacketSamples(uint32_t &x, uint32_t &y) = 0;
-=======
     virtual Sample *getPacketSamples(uint32_t &x, uint32_t &y, Random462 &rng) = 0;
 
 	void allocate() {
@@ -439,10 +338,9 @@ public:
 		return sampleset.add2D(twoD);
     }
 
-	uint32_t get_sample_size() {
-		return sampleset.sample_size;
-	}
->>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
+    uint32_t get_sample_size() {
+	return sampleset.sample_size;
+    }
 
     uint32_t width, height;
     uint32_t p_width_x, p_width_y;
