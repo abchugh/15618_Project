@@ -7,6 +7,7 @@
 
 #include "scene/triangle.hpp"
 #include "application/opengl.hpp"
+#include "material/material.hpp"
 
 namespace _462 {
 
@@ -106,18 +107,26 @@ namespace _462 {
 
     void Triangle::getMaterialProperties(MaterialProp& mp, const Vector2& texCoord, const Material* material)
     {
-        mp.diffuse = material->diffuse;
-        mp.ambient = material->ambient;
-        mp.specular = material->specular;
-        mp.refractive_index = material->refractive_index;
-        mp.texColor = Color3(1,1,1);
+		mp.diffuse = Color3(0,0,0);
+        mp.ambient = Color3(0,0,0);
+        mp.specular= Color3(0,0,0);
+        mp.refractive_index= 0;
+        mp.texColor = Color3(0,0,0);
 
-        if(material->get_texture_data())
-        {
-            int width,height;
-            material->get_texture_size(&width, &height );
-            mp.texColor = material->get_texture_pixel( texCoord[0]*width,texCoord[1]*height);
-        }
+		if (material) {
+			mp.diffuse = material->diffuse;
+			mp.ambient = material->ambient;
+			mp.specular = material->specular;
+			mp.refractive_index = material->refractive_index;
+			mp.texColor = Color3(1,1,1);
+
+			if(material->get_texture_data())
+			{
+				int width,height;
+				material->get_texture_size(&width, &height );
+				mp.texColor = material->get_texture_pixel( texCoord[0]*width,texCoord[1]*height);
+			}
+		}
     }
 
     void Triangle::InitGeometry()
@@ -172,6 +181,15 @@ namespace _462 {
                 //else
                 getMaterialProperties(hs[i].mp,texCoord, materials[0]);
                 hs[i].n = Vector3(norm_x[i - start], norm_y[i - start], norm_z[i - start]);
+				if (materials[0])
+					hs[i].bsdf_ptr = (BSDF*)&(materials[0]->bsdf);
+				Vector3 x, y, z = hs[i].n;
+				coordinate_system(z, &x, &y);
+			
+				hs[i].shading_trans = Matrix3(x, y, z);
+				inverse(&hs[i].inv_shading_trans, hs[i].shading_trans);
+				hs[i].shape_ptr = (Geometry*)this;
+				hs[i].p = packet.rays[i].d * hs[i].t + packet.rays[i].e;
             }
         }
 
@@ -184,21 +202,31 @@ namespace _462 {
         delete[] norm_y;
         delete[] norm_z;
     }
-    /*
-    Ray tRay = r.transform(invMat);
-    real_t mult[3];
-    Vector3 position[] = { vertices[0].position, vertices[1].position, vertices[2].position };
-    const Material* materials[] = { vertices[0].material,vertices[1].material,vertices[2].material };
-    real_t t;
-    if(!getBarycentricCoordinates(tRay,t,mult,position))
-    return false;
+    
+	float Triangle::get_area() {
+		Vector3 a = vertices[1].position - vertices[0].position;
+        Vector3 b = vertices[2].position - vertices[0].position;
 
-    if(t<t0 || t>t1)
-    return false;
-    h.t = t;
-    if(!fullRecord)
-    return true;
-    */
+		return length(cross(a, b)) * 0.5f;
+	}
+
+	Vector3 Triangle::sample(const Vector3 &p, float r1, float r2, float c, Vector3 *n_ptr) {
+		Vector2 tri_sample = uniform_sample_triangle(r1, r2);
+		float alpha = tri_sample.x;
+		float beta = tri_sample.y;
+		float gamma = 1 - alpha - beta;
+
+		Vector3 result = alpha * vertices[0].position + beta * vertices[1].position + gamma * vertices[2].position;
+		*n_ptr = alpha * vertices[0].normal + beta * vertices[1].normal + gamma * vertices[2].normal;
+		*n_ptr = normalize(*n_ptr);
+
+		return result;
+	}
+
+	float Triangle::pdf(const Vector3 &p, const Vector3 &wi) {
+		return 1.f / get_area();
+	}
+
     bool Triangle::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& hR, bool fullRecord) const
     {
         Ray tRay = r.transform(invMat);
@@ -244,6 +272,7 @@ namespace _462 {
             return false;
 
         hR.t = time;
+		hR.shape_ptr = (Geometry*)this;
 
         if (!fullRecord)
             return true;
@@ -271,6 +300,15 @@ namespace _462 {
         for(int i=0;i<3;i++)
             hR.n += mult[i]*vertices[i].normal;
         hR.n = normalize( normMat*hR.n);
+
+		if (materials[0])
+			hR.bsdf_ptr = (BSDF*)&(materials[0]->bsdf);
+		Vector3 x, y, z = hR.n;
+		coordinate_system(z, &x, &y);
+			
+		hR.shading_trans = Matrix3(x, y, z);
+		inverse(&hR.inv_shading_trans, hR.shading_trans);
+		hR.p = r.d * time + r.e;
 
         return true;
     }

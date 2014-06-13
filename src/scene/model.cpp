@@ -7,7 +7,7 @@
  */
 
 #include "scene/model.hpp"
-#include "scene/material.hpp"
+#include "material/material.hpp"
 #include "application/opengl.hpp"
 #include "scene/triangle.hpp"
 #include <iostream>
@@ -19,7 +19,7 @@
 
 namespace _462 {
 
-Model::Model() : mesh( 0 ), material( 0 ), bvh(NULL) { }
+Model::Model() : mesh( 0 ), material( 0 ), bvh(NULL), sum_area(-1) { }
 Model::~Model()
 { 
 	if(bvh)
@@ -47,6 +47,9 @@ void Model::InitGeometry()
 		bvh = NULL;
 	}
 	
+	if (mesh == NULL)
+		return ;
+
 	triangles.clear();
 
 	Geometry::InitGeometry();
@@ -99,8 +102,49 @@ bool Model::hit(const Ray& r, const real_t t0, const real_t t1,hitRecord& h, boo
 {
 	if(!checkBoundingBoxHit(r,t0,t1))
 		return false;
-	return bvh->hit(r,t0,t1,h,fullRecord) != NULL;
+	bool hit = (bvh->hit(r,t0,t1,h,fullRecord) != NULL);
+	if (hit)
+		h.shape_ptr = const_cast<Model*>(this);
+	if (hit && fullRecord) {
+		h.bsdf_ptr = const_cast<BSDF*>(&(material->bsdf));
+		
+		Vector3 x, y, z = h.n;
+		coordinate_system(z, &x, &y);
+		h.shading_trans = Matrix3(x, y, z);
+	}
+	
+	return hit;
 }
 
+float Model::get_area() {
+	if (sum_area > 0)
+		return sum_area;
+	float area = 0;
+
+	for (unsigned int i = 0; i < triangles.size(); i++) {
+		area += triangles[i].get_area();
+	}
+
+	sum_area = area;
+	return area;
+}
+	
+Vector3 Model::sample(const Vector3 &p, float r1, float r2, float c, Vector3 *n_ptr) {
+	int id = (int) triangles.size() * c;
+
+	if (id >= triangles.size())
+		id = triangles.size() - 1;
+
+	return triangles[id].sample(p, r1, r2, c, n_ptr);
+}
+
+float Model::pdf(const Vector3 &p, const Vector3 &wi) {
+	float pdf = 0.f;
+	for (uint32_t i = 0; i < triangles.size(); i++) {
+		pdf += triangles[i].get_area() * triangles[i].pdf(p, wi);
+	}
+
+	return pdf / get_area();
+}
 
 } /* _462 */

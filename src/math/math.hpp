@@ -32,6 +32,18 @@ inline T clamp( T val, T min, T max )
 }
 
 
+static inline float radicalInverse(int n, int base) {
+    float result = 0;
+    float invBase = 0.5f;
+
+    for (; n > 0; n /= base, invBase /= base) {
+	int low = n % base;
+	result += invBase * low;
+    }
+
+    return result;
+}
+
 } /* _462 */
 
 #endif /* _462_MATH_MATH_HPP_ */

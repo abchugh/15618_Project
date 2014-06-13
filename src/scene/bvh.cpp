@@ -111,6 +111,7 @@ namespace _462 {
             poolPtr[i] = new BuildNodePool(block_size, inc_size);
         }
         poolPtr[thread_count] = new BuildNodePool(40, 10);
+		poolPtr[thread_count + 1] = NULL;
 		
         printf("Started parallel node phase at %ld \n", endTime-startTime);
         while(pq.size()<=omp_get_max_threads()-1)
@@ -245,6 +246,8 @@ namespace _462 {
         int thread_count = omp_get_max_threads();
 
         for (int i = 0; i < thread_count + 1; i++) {
+			if (poolPtr[i] == NULL)
+				break;
             poolPtr[i]->destroy();
             delete (poolPtr[i]);
         }
@@ -812,6 +815,13 @@ finishUp:
 #endif
     }
 
+	void BVHAccel::get_bounding_box(BoundingBox *bb_ptr) {
+		if(!nodes) {
+			bb_ptr->lowCoord = bb_ptr->highCoord = Vector3::Zero();
+            return ;
+		}
+		*bb_ptr = nodes[0].bounds;
+	}
 
     void BVHAccel::hit(const Packet& packet, const real_t t0, const real_t t1, vector<hitRecord>& records, bool fullRecord) const
     {
@@ -861,24 +871,23 @@ finishUp:
                     assert(todoOffset<64);
                 }
                 else {
-                    // TODO: SIMDize by rewriting hit function
-                    // Better to use large packet.
-                    uint32_t lastActive = getLastHit(packet, node->bounds, active, dirIsNeg, t0, t1_max, records, fullRecord);
-                    
+					uint32_t lastActive = getLastHit(packet, node->bounds, active, dirIsNeg, t0, t1_max, records, fullRecord);
+#ifdef ISPC_RENDER
                     for (uint32_t i = active; i < lastActive; i++)
                         t1s[i] = records[i].t;
 
                     for (uint32_t j = 0; j < node->nPrimitives; j++) {
                         primitives[node->primitivesOffset + j]->hitPacket(packet, active, lastActive, t0, t1s, records, fullRecord);
                     }
-                    
-                    /*for (uint32_t i = active; i < lastActive; i++) {
+#else
+                    for (uint32_t i = active; i < lastActive; i++) {
                         for (uint32_t j = 0; j < node->nPrimitives; j++) {
                             // Use full record, since we still don't know how to deal with shadow ray (yet).
                             
                             primitives[node->primitivesOffset + j]->hit(packet.rays[i], t0, records[i].t, records[i], fullRecord);
                         }
-                    }*/
+                    }
+#endif
 
                     if (todoOffset == 0)
                         break;

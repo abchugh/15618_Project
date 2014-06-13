@@ -209,12 +209,12 @@ namespace _462 {
         BVHAccel(const std::vector<Geometry*>& geometries, uint32_t maxPrims = 1,
             const std::string &sm = "sah");
 
-        //bvhNode();
         ~BVHAccel();
 
         void threadedSubtreeBuild(PrimitiveInfoList &buildData, std::vector< Geometry* > &orderedPrims, uint32_t *totalNodes);
         Geometry* hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const;
         void hit(const Packet& packet, const real_t t0, const real_t t1, std::vector<hitRecord>& records, bool fullRecord) const;
+		void get_bounding_box(BoundingBox *bb_ptr);
 
     private:
         BVHBuildNode *recursiveBuild(PrimitiveInfoList &buildData, uint32_t start, uint32_t end,

@@ -7,7 +7,10 @@
  */
 
 #include "scene/sphere.hpp"
+#include "scene/ray.hpp"
+#include "sample/sampler.hpp"
 #include "application/opengl.hpp"
+#include "material/material.hpp"
 
 namespace _462 {
 
@@ -110,7 +113,54 @@ void Sphere::InitGeometry()
 
     // TODO: sphere's hitpacket
 void Sphere::hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1Ptr, std::vector<hitRecord>& hs, bool fullRecord) const {
+	for (uint32_t i = start; i < end; i++) {
+		this->hit(packet.rays[i], t0, t1Ptr[i], hs[i], fullRecord);
+	}
+}
 
+float Sphere::get_area() {
+	return 4 * PI * radius * radius;
+}
+
+Vector3 Sphere::sample(float r1, float r2, Vector3 *n_ptr) {
+	*n_ptr = normalize(uniform_sample_sphere(r1, r2));
+	return *n_ptr * radius + position;
+}
+
+Vector3 Sphere::sample(const Vector3 &p, float r1, float r2, float c, Vector3 *n_ptr) {
+	if (squared_length(position - p) < radius * radius) {
+		return sample(r1, r2, n_ptr);
+	}
+	
+	Vector3 sample_n = normalize(position - p);
+	Vector3 x, y;
+	coordinate_system(sample_n, &x, &y);
+	
+	float v1 = dot(x, sample_n), v2 = dot(x, y), v3 = dot(y, sample_n);
+	float test = squared_length(position - p);
+
+	float cos_max = std::sqrtf(1.f - radius * radius / squared_length(position - p));
+	Vector3 p_cone = uniform_sample_cone(r1, r2, cos_max, x, y, sample_n);
+	Ray r(p, p_cone);
+
+	hitRecord h;
+	float time;
+	if(!this->hit(r, 1e-3, BIG_NUMBER, h, true))
+		time = dot(position - p, normalize(p_cone - p));
+	else
+		time = h.t;
+	p_cone = r.e + time * r.d;
+	*n_ptr = normalize(p_cone - position);
+
+	return p_cone;
+}
+
+float Sphere::pdf(const Vector3 &p, const Vector3 &wi) {
+	if (squared_length(position - p) < radius * radius) {
+		return uniform_sample_sphere_pdf();
+	}
+	float cos_max = std::sqrtf(1.f - radius * radius / squared_length(position - p));
+	return uniform_sample_cone_pdf(cos_max);
 }
 
 bool Sphere::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord & h, bool fullRecord) const
@@ -143,31 +193,44 @@ bool Sphere::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord & h, 
 		{
 			Vector3 p = e + h.t*d;
 			h.n = normalize(normMat*(p-c));
-			h.mp.diffuse = material->diffuse;
-			h.mp.ambient = material->ambient;
-			h.mp.specular = material->specular;
-			h.mp.refractive_index = material->refractive_index;
+
+			Vector3 x, y, z = h.n;
+			coordinate_system(z, &x, &y);
+
+			h.shading_trans = Matrix3(x, y, z);
+			inverse(&h.inv_shading_trans, h.shading_trans);
+
+			if (material != NULL) {
+				h.mp.diffuse = material->diffuse;
+				h.mp.ambient = material->ambient;
+				h.mp.specular = material->specular;
+				h.mp.refractive_index = material->refractive_index;
 			
-			h.mp.texColor = Color3(1,1,1);
-			if(material->get_texture_data())
-			{
-				int width,height;
-				material->get_texture_size(&width, &height );
+				h.mp.texColor = Color3(1,1,1);
+				if(material->get_texture_data())
+				{
+					int width,height;
+					material->get_texture_size(&width, &height );
 
-				real_t x = p.z;
-				real_t y = p.x;
-				real_t z = p.y;
-				Vector3 v = Vector3(x,y,z);
-				project( invMat*Vector4(v,1));
+					real_t x = p.z;
+					real_t y = p.x;
+					real_t z = p.y;
+					Vector3 v = Vector3(x,y,z);
+					project( invMat*Vector4(v,1));
 
-				real_t theta = acos(v.z/radius	);
-				real_t phi = atan2(v.y,v.x);
-				if(phi<0)
-					phi += 2*PI;
+					real_t theta = acos(v.z/radius	);
+					real_t phi = atan2(v.y,v.x);
+					if(phi<0)
+						phi += 2*PI;
 
-				h.mp.texColor = material->get_texture_pixel( (phi/(2*PI))*width, ((PI-theta)/PI)*height);
+					h.mp.texColor = material->get_texture_pixel( (phi/(2*PI))*width, ((PI-theta)/PI)*height);
+				}
+				h.bsdf_ptr = (BSDF*)&(material->bsdf);
 			}
 		}
+		h.shape_ptr = (Geometry*)this;
+		h.p = r.d * t + r.e;
+
 		return true;
 	}
 

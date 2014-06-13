@@ -46,7 +46,9 @@ public:
     static bool getBarycentricCoordinates(const Ray& r, real_t& t,real_t mult[3], Vector3 position[3]);
     static void getMaterialProperties(MaterialProp& mp, const real_t mult[3],const Vector2& texCoord, const Material* materials[3]);
     static void getMaterialProperties(MaterialProp& mp, const Vector2& texCoord, const Material* materials);
-
+	virtual float get_area();
+	virtual Vector3 sample(const Vector3 &p, float r1, float r2, float c, Vector3 *n_ptr);
+	virtual float pdf(const Vector3 &p, const Vector3 &wi);
 };
 
 

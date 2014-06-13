@@ -8,6 +8,7 @@
 
 #include "scene/scene.hpp"
 #include "math/random462.hpp"
+#include "ray.hpp"
 #include <algorithm>
 #include "scene/model.hpp"
 #include <vector>
@@ -20,10 +21,36 @@ namespace _462 {
     const real_t SLOP = 1e-5;
     time_t ta[MAX_THREADS], tb[MAX_THREADS], ts[MAX_THREADS], tt[MAX_THREADS], tu[MAX_THREADS];
 
+	Packet::Packet(size_t packet_size) {
+            rays = new Ray[packet_size];
+
+            e_x = (float*)memalign(16, sizeof(float) * packet_size);
+            e_y = (float*)memalign(16, sizeof(float) * packet_size);
+            e_z = (float*)memalign(16, sizeof(float) * packet_size);
+
+            d_x = (float*)memalign(16, sizeof(float) * packet_size);
+            d_y = (float*)memalign(16, sizeof(float) * packet_size);
+            d_z = (float*)memalign(16, sizeof(float) * packet_size);
+
+            size = packet_size;
+        }   
+
+        Packet::~Packet() {
+            delete[] rays;
+
+            _aligned_free(e_x);
+            _aligned_free(e_y);
+            _aligned_free(e_z);
+            _aligned_free(d_x);
+            _aligned_free(d_y);
+            _aligned_free(d_z);
+        }
+
     Geometry::Geometry():
         position(Vector3::Zero()),
         orientation(Quaternion::Identity()),
-        scale(Vector3::Ones())
+        scale(Vector3::Ones()),
+		light_ptr(NULL)
     {
 
     }
@@ -33,9 +60,8 @@ namespace _462 {
     void Geometry::InitGeometry()
     {
         make_inverse_transformation_matrix(&invMat, position, orientation, scale);
-        Matrix4 mat;
-        make_transformation_matrix(&mat, position, orientation, scale);
-        make_normal_matrix(&normMat, mat);
+        make_transformation_matrix(&transMat, position, orientation, scale);
+        make_normal_matrix(&normMat, transMat);
 
         return;
     }
@@ -95,6 +121,7 @@ namespace _462 {
     void Scene::buildBVH()
     {
         tree = new BVHAccel(geometries);
+		tree->get_bounding_box(&world_bounding);
     }
 
     Geometry* const* Scene::get_geometries() const
@@ -107,14 +134,14 @@ namespace _462 {
         return geometries.size();
     }
 
-    const SphereLight* Scene::get_lights() const
+    Light* const* Scene::get_lights() const
     {
-        return point_lights.empty() ? NULL : &point_lights[0];
+        return lights.empty() ? NULL : &lights[0];
     }
 
     size_t Scene::num_lights() const
     {
-        return point_lights.size();
+        return lights.size();
     }
 
     Material* const* Scene::get_materials() const
@@ -156,35 +183,14 @@ namespace _462 {
         geometries.clear();
         materials.clear();
         meshes.clear();
-        point_lights.clear();
+        lights.clear();
+		simple_lights.clear();
 
         camera = Camera();
 
         background_color = Color3::Black();
         ambient_light = Color3::Black();
         refractive_index = 1.0;
-    }
-
-    //n,     kd
-    //h[i].n,h[i].mp.diffuse
-    	static unsigned long _xR=123456789, _yR =362436069, _zR=521288629;
-
-	static unsigned long xorshf96(void) {          //period 2^96-1
-	unsigned long t;
-		_xR ^= _xR << 16;
-		_xR ^= _xR >> 5;
-		_xR ^= _xR << 1;
-
-	   t = _xR;
-	   _xR = _yR;
-	   _yR = _zR;
-	   _zR = t ^ _xR ^ _yR;
-
-	  return _zR;
-	}
-    static inline real_t random()
-    {
-        return (real_t) xorshf96()/(float)(~0UL);
     }
 
     void Scene::calculateDiffuseColors(vector<Vector3>& p,vector<hitRecord>& h, Color3* col) const
@@ -194,7 +200,7 @@ namespace _462 {
         int indices[1024];
         assert(numRays<=1024);
 		time_t startTime;
-        for(unsigned int l=0;l<point_lights.size();l++)
+        for(unsigned int l=0;l<simple_lights.size();l++)
         {
             int numShadowRays = 0;
             vector<Vector3> locs;
@@ -205,10 +211,12 @@ namespace _462 {
             startTime = SDL_GetTicks();
             for(int i=0;i<numRays;i++) if(h[i].t>=0)//check if this actually hit something
             {
-                real_t x = random(), y = random(), z = random();
-                Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
-                Vector3 L = normalize(loc-p[i]);
-                real_t NDotL = dot(h[i].n,L);
+				Vector3 loc;
+				real_t NDotL;
+				real_t x = 2 * random_uniform() - 1, y = 2 * random_uniform() - 1, z = 2 * random_uniform() - 1;
+				loc = simple_lights[l].position + normalize(Vector3(x,y,z)) * simple_lights[l].radius;
+				Vector3 L = normalize(loc-p[i]);
+				NDotL = dot(h[i].n,L);
 
                 if(NDotL<=0) continue;
                 locs.push_back(loc);
@@ -221,6 +229,7 @@ namespace _462 {
             for(int i=0;i<numShadowRays;i++)
             {
                 pkt.rays[i].e = p[ indices[i] ];
+				float dis = length(locs[i] - simple_lights[0].position);
                 pkt.rays[i].d = locs[i] - p[ indices[i] ];
                 pkt.e_x[i] = pkt.rays[i].e[0];
                 pkt.e_y[i] = pkt.rays[i].e[1];
@@ -234,39 +243,58 @@ namespace _462 {
             vector<hitRecord> hShadow(numShadowRays);
 
             startTime = SDL_GetTicks();
-            tree->hit(pkt, SLOP, 1, hShadow, false);
+            tree->hit(pkt, SLOP, 1 - SLOP, hShadow, false);
             tb[omp_get_thread_num()] += SDL_GetTicks()-startTime;
             
 			
             startTime = SDL_GetTicks();
+			float dis;
+			float dis2;
             for(int i=0;i<numShadowRays;i++)
             {
                 //We just want to check if something is between the point and the source
                 if(hShadow[i].t<0)
                 {
-                    Color3 c = point_lights[l].color;
-                    real_t d = sqrt( dot(p[ indices[i] ]-point_lights[l].position,p[ indices[i] ]-point_lights[l].position) );
-                    c /= point_lights[l].attenuation.constant + d*point_lights[l].attenuation.linear + d*d*point_lights[l].attenuation.quadratic;
+                    Color3 c = simple_lights[l].color;
+                    real_t d = sqrt( dot(p[ indices[i] ]-simple_lights[l].position,p[ indices[i] ]-simple_lights[l].position) );
+                    c /= simple_lights[l].attenuation.constant + d*simple_lights[l].attenuation.linear + d*d*simple_lights[l].attenuation.quadratic;
                     col[ indices[i] ] += h[indices[i]].mp.diffuse*c*NDotLs[ i ];
                 }
+				/*
+				else {
+					dis = length(hShadow[i].t * pkt.rays[i].d + pkt.rays[i].e - simple_lights[0].position);
+					dis2 = length(pkt.rays[i].d + pkt.rays[i].e - simple_lights[0].position);
+					Vector3 v1 = hShadow[i].t * pkt.rays[i].d + pkt.rays[i].e, v2 = pkt.rays[i].d + pkt.rays[i].e;
+					printf("%f <-> %f\n", dis, dis2);
+				}
+				*/
             }
             tt[omp_get_thread_num()] += SDL_GetTicks()-startTime;
             //average over the simulations
         }
     }
+
+	bool Scene::hit(const Ray& r, const real_t t0, const real_t t1, hitRecord& h, bool fullRecord) const {
+		return tree->hit(r, t0, t1, h, fullRecord) != NULL;
+	}
+
+	void Scene::hit(const Packet& packet, const real_t t0, const real_t t1, std::vector<hitRecord>& records, bool fullRecord) const {
+		return tree->hit(packet, t0, t1, records, fullRecord);
+	}
+
     Color3 Scene::calculateDiffuseColor(Vector3 p,Vector3 n,Color3 kd) const
     {
         /*Number of shadow rays fired to light source*/
         // TODO: more shadow rays to use packet?
         const int sim = 1;
         Color3 col(0,0,0);
-        for(unsigned int l=0;l<point_lights.size();l++)
+        for(unsigned int l=0;l<simple_lights.size();l++)
         {
             Color3 temp(0,0,0);
             for(int s = 0; s<sim; s++)
             {
                 real_t x = random_gaussian(), y = random_gaussian(), z = random_gaussian();
-                Vector3 loc = point_lights[l].position + normalize(Vector3(x,y,z)) * point_lights[l].radius;
+                Vector3 loc = simple_lights[l].position + normalize(Vector3(x,y,z)) * simple_lights[l].radius;
 
                 Vector3 L = normalize(loc-p);
                 real_t NDotL = dot(n,L);
@@ -279,11 +307,11 @@ namespace _462 {
                     hitRecord h;
 
                     //We just want to check if something is between the point and the source
-                    if(!tree->hit(shadowRay, SLOP, 1, h, false))
+                    if(!tree->hit(shadowRay, SLOP, 1 - 1e-4, h, false))
                     {
-                        Color3 c = point_lights[l].color;
-                        real_t d = sqrt( dot(p-point_lights[l].position,p-point_lights[l].position) );
-                        c /= point_lights[l].attenuation.constant + d*point_lights[l].attenuation.linear + d*d*point_lights[l].attenuation.quadratic;
+                        Color3 c = simple_lights[l].color;
+                        real_t d = sqrt( dot(p-simple_lights[l].position,p-simple_lights[l].position) );
+                        c /= simple_lights[l].attenuation.constant + d*simple_lights[l].attenuation.linear + d*d*simple_lights[l].attenuation.quadratic;
                         temp += kd*c*NDotL;
                     }
                 }
@@ -379,7 +407,7 @@ namespace _462 {
         
         for(int i=0; i<packet.size;i++) if(h[i].t>=0)
         {
-            if(0)//depth>0)
+            if(depth>0)
             {
                 real_t reflectedRatio;
                 Color3 reflectedColor(0,0,0);
@@ -564,11 +592,27 @@ namespace _462 {
         meshes.push_back( m );
     }
 
-    void Scene::add_light( const SphereLight& l )
+    void Scene::add_light( Light* l )
     {
-        point_lights.push_back( l );
+        lights.push_back( l );
     }
 
+	const SphereLight* Scene::get_simple_lights() const {
+		return simple_lights.empty() ? NULL : &simple_lights[0];
+	}
+
+    size_t Scene::num_simple_lights() const {
+		return simple_lights.size();
+	}
+
+	void Scene::add_simple_light( const SphereLight& l ) {
+		simple_lights.push_back( l );
+	}
+
+	void Scene::bounding_sphere(Vector3 *center_ptr, float *r_ptr) const {
+		*center_ptr = (world_bounding.lowCoord + world_bounding.highCoord) / 2;
+		*r_ptr = length(*center_ptr - world_bounding.lowCoord);
+	}
 
 } /* _462 */
 

@@ -10,6 +10,10 @@
 #include "scene/scene.hpp"
 #include "scene/sphere.hpp"
 #include "scene/model.hpp"
+#include "material/btdf.hpp"
+#include "material/material.hpp"
+#include "light/area.hpp"
+#include "light/point.hpp"
 #include "scene/triangle.hpp"
 #include "tinyxml/tinyxml.h"
 
@@ -45,6 +49,7 @@ static const char STR_NORMAL[] = "normal";
 static const char STR_TCOORD[] = "tex_coord";
 static const char STR_COLOR[] = "color";
 static const char STR_RADIUS[] = "radius";
+static const char STR_NUM_SAMPLES[] = "num_samples";
 static const char STR_VERTEX[] = "vertex";
 static const char STR_ACON[] = "attenuation_constant";
 static const char STR_ALIN[] = "attenuation_linear";
@@ -61,10 +66,12 @@ static const char STR_BACKGROUND[] = "background_color";
 static const char STR_AMLIGHT[] = "ambient_light";
 static const char STR_CAMERA[] = "camera";
 static const char STR_PLIGHT[] = "point_light";
+static const char STR_SPHERE_LIGHT[] = "sphere_light";
 static const char STR_MATERIAL[] = "material";
 static const char STR_SPHERE[] = "sphere";
 static const char STR_TRIANGLE[] = "triangle";
 static const char STR_MODEL[] = "model";
+static const char STR_AREA_LIGHT[] = "area_light";
 static const char STR_MESH[] = "mesh";
 
 static void print_error_header( const TiXmlElement* base )
@@ -94,6 +101,20 @@ static const TiXmlElement* get_unique_child( const TiXmlElement* parent, bool re
     }
 
     return elem;
+}
+
+static void parse_attrib_int( const TiXmlElement* elem, bool required, const char* name, int* val )
+{
+	int rv = elem->QueryIntAttribute( name, val );
+    if ( rv == TIXML_WRONG_TYPE ) {
+        print_error_header( elem );
+        std::cout << "error parsing '" << name << "'.\n";
+        throw std::exception();
+    } else if ( required && rv == TIXML_NO_ATTRIBUTE ) {
+        print_error_header( elem );
+        std::cout << "missing '" << name << "'.\n";
+        throw std::exception();
+    }
 }
 
 static void parse_attrib_double( const TiXmlElement* elem, bool required, const char* name, double* val )
@@ -135,6 +156,11 @@ template< typename T >
 static void parse_elem( const TiXmlElement* /*elem*/, T* /*val*/ )
 {
     throw std::exception();
+}
+
+template<> void parse_elem< int >( const TiXmlElement* elem, int* d )
+{
+    parse_attrib_int( elem, true, "v", d );
 }
 
 template<> void parse_elem< double >( const TiXmlElement* elem, double* d )
@@ -229,11 +255,38 @@ static const char* parse_material( const TiXmlElement* elem, Material* material 
     parse_attrib_string( elem, false, STR_TEXTURE,  &material->texture_filename );
     parse_attrib_string( elem, true,  STR_NAME,     &name );
 
+	material->ambient.r = material->ambient.g = material->ambient.b = 0.;
+	material->diffuse.r = material->diffuse.g = material->diffuse.b = 0.;
+
     parse_elem( elem, false, STR_REFRACT,   &material->refractive_index );
     parse_elem( elem, false, STR_AMBIENT,   &material->ambient );
     parse_elem( elem, false, STR_DIFFUSE,   &material->diffuse );
     parse_elem( elem, false, STR_SPECULAR,  &material->specular );
     parse_elem( elem, false, STR_SHININESS,  &material->shininess );
+
+	if (material->refractive_index > 1e-4) {
+		// TODO : add transmission color
+		FresnelDielectric *fr = new FresnelDielectric(1.f, material->refractive_index);
+		SpecularTransmission *trans = new SpecularTransmission(Color3::White(), *fr);
+		material->bsdf.add((BxDF*)trans);
+
+		if (material->specular != Color3::Black()) {
+			SpecularReflection *ref = new SpecularReflection(material->specular, fr);
+			material->bsdf.add((BxDF*)ref);
+		}		
+	}
+
+	if (material->specular != Color3::Black() && material->refractive_index <= 1e-4) {
+		FresnelNoOp *fr = new FresnelNoOp();
+		SpecularReflection *ref = new SpecularReflection(material->specular, fr);
+
+		material->bsdf.add((BxDF*)ref);
+	}
+
+	if (material->diffuse != Color3::Black()) {
+		Lambertian *lam_ptr = new Lambertian(material->diffuse);
+		material->bsdf.add((BxDF*)lam_ptr);
+	}
 
     return name;
 }
@@ -324,6 +377,38 @@ static void check_mem( void* ptr )
     }
 }
 
+static void parse_geom_triangle_model( Scene* scene, const MaterialMap& matmap, const TriVertMap& tvmap, const TiXmlElement* elem, Model* geom )
+{
+	parse_lookup_data( matmap, elem, STR_MATERIAL, &geom->material );
+	Mesh *mesh_ptr = new Mesh();
+	Triangle triangle;
+	elem = elem->FirstChildElement( STR_TRIANGLE );
+    while ( elem ) {
+		MeshTriangle mesh_triangle;
+		check_mem( geom );
+		parse_geom_triangle( matmap, tvmap, elem, &triangle );
+
+		for (uint32_t i = 0; i < 3; i++) {
+			MeshVertex vertex;
+			vertex.position = triangle.vertices[i].position + triangle.position;
+			vertex.normal = triangle.vertices[i].normal;
+			vertex.tex_coord = triangle.vertices[i].tex_coord;
+			mesh_ptr->vertices.push_back(vertex);
+
+			mesh_triangle.vertices[i] = mesh_ptr->vertices.size() - 1;
+		}
+
+		mesh_ptr->triangles.push_back(mesh_triangle);
+		//geom->triangles.push_back(*triangle);
+        elem = elem->NextSiblingElement( STR_TRIANGLE );
+	}
+	mesh_ptr->has_normals = true;
+	mesh_ptr->has_tcoords = true;
+	mesh_ptr->create_gl_data();
+	scene->add_mesh(mesh_ptr);
+	geom->mesh = mesh_ptr;
+}
+
 bool load_scene( Scene* scene, const char* filename )
 {
     TiXmlDocument doc( filename );
@@ -370,9 +455,48 @@ bool load_scene( Scene* scene, const char* filename )
         elem = root->FirstChildElement( STR_PLIGHT );
         while ( elem ) {
             SphereLight pl;
+			pl.radius = 0;
             parse_point_light( elem, &pl );
-            scene->add_light( pl );
+            scene->add_simple_light( pl );
+			Matrix3 trans;
+			Vector3 z(0.f, 0.f, -1.f);
+			Vector3 x, y;
+			coordinate_system(z, &x, &y);
+
+			Light *light_ptr;
+			light_ptr = new PointLight(Matrix3(x, y, z), pl.position, pl.color);
+			parse_elem( elem, false,  STR_NUM_SAMPLES, &light_ptr->num_samples );
+			scene->add_light(light_ptr);
+
             elem = elem->NextSiblingElement( STR_PLIGHT );
+        }
+
+		// STR_SPHERE_LIGHT
+		elem = root->FirstChildElement( STR_SPHERE_LIGHT );
+        while ( elem ) {
+            SphereLight pl;
+			pl.radius = 0;
+            parse_point_light( elem, &pl );
+            scene->add_simple_light( pl );
+			Matrix3 trans;
+			Vector3 z(0.f, 0.f, -1.f);
+			Vector3 x, y;
+			coordinate_system(z, &x, &y);
+
+			Light *light_ptr;
+			if (pl.radius > 1e-3) {
+				Sphere *sphere_ptr = new Sphere();
+				sphere_ptr->position = pl.position;
+				sphere_ptr->radius = pl.radius;
+			
+				light_ptr = new AreaLight(Matrix3(x, y, z), sphere_ptr, pl.color, 16);
+				sphere_ptr->light_ptr = (AreaLight*)light_ptr;
+				scene->add_geometry( sphere_ptr );
+				parse_elem( elem, false,  STR_NUM_SAMPLES, &light_ptr->num_samples );
+				scene->add_light(light_ptr);
+			}
+			
+            elem = elem->NextSiblingElement( STR_SPHERE_LIGHT );
         }
 
         // parse the materials
@@ -461,6 +585,29 @@ bool load_scene( Scene* scene, const char* filename )
         }
 
         // TODO add you own geometries here
+		
+		elem = root->FirstChildElement( STR_AREA_LIGHT );
+        while ( elem ) {
+            Model* geom = new Model();
+            check_mem( geom );
+            scene->add_geometry( geom );
+            parse_geom_triangle_model( scene, materials, triverts, elem, geom );
+			Matrix3 trans;
+			Vector3 z(0.f, 0.f, -1.f);
+			Vector3 x, y;
+			coordinate_system(z, &x, &y);
+			AreaLight *light_ptr = new AreaLight(Matrix3(x, y, z), geom, Color3::Black());
+			geom->light_ptr = light_ptr;
+
+			parse_elem( elem, true,  STR_COLOR, &light_ptr->l );
+			int num_samples;
+			parse_elem( elem, false,  STR_NUM_SAMPLES, &num_samples );
+			light_ptr->num_samples = num_samples;
+
+			scene->add_light(light_ptr);
+
+            elem = elem->NextSiblingElement( STR_AREA_LIGHT );
+        }
 
     } catch ( std::bad_alloc const& ) {
         std::cout << "Out of memory error while loading scene\n.";

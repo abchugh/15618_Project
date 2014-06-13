@@ -20,7 +20,23 @@ Color3::Color3( const unsigned char* arr )
 void Color3::to_array( unsigned char arr[4] ) const
 {
     // clamp values
-    Color3 tmp = clamp( *this, 0.0, 1.0 );
+    Color3 tmp = clamp( 20 * *this, 0.0, 1.0 );
+
+    // convert to ints
+    arr[0] = static_cast<unsigned char>( tmp.r * 0xff );
+    arr[1] = static_cast<unsigned char>( tmp.g * 0xff );
+    arr[2] = static_cast<unsigned char>( tmp.b * 0xff );
+    arr[3] = 0xff;
+}
+
+void Color3::to_array_gamma( unsigned char arr[4], float a, float gamma ) const {
+	// clamp values
+	Color3 self = *this;
+	self.r = a * std::powf(self.r, gamma);
+	self.g = a * std::powf(self.g, gamma);
+	self.b = a * std::powf(self.b, gamma);
+
+    Color3 tmp = clamp( self, 0.0, 1.0 );
 
     // convert to ints
     arr[0] = static_cast<unsigned char>( tmp.r * 0xff );

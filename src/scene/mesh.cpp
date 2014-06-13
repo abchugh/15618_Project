@@ -59,6 +59,10 @@ Mesh::~Mesh() { }
 
 bool Mesh::load()
 {
+	if (filename.length() == 0 &&
+		triangles.size() > 0)
+		return true;
+
     std::cout << "Loading mesh from '" << filename << "'..." << std::endl;
 #ifdef _WINDOWS
 	filename = std::string("../../").append(filename);
