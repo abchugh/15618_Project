@@ -211,13 +211,13 @@ public:
 	#pragma omp critical
 		{
 			des = current++;
-			if (des >= alloc_size)
-				des = des % alloc_size;
+			
 		}
 	#else
 		des = __sync_fetch_and_add(&current, 1);
 	#endif
-
+		if (des >= alloc_size)
+				des = des % alloc_size;
 		assert(des < sample_capacity);
 
 		memcpy(samples + sample_size * des, oneD, sizeof(float) * oneD_num.size());
@@ -243,7 +243,12 @@ public:
 			} while (des < alloc_size && des + count - 1 >= alloc_size);
 		}
 	#else
-		des = __sync_fetch_and_add(&current, count);
+		do {
+				des = __sync_fetch_and_add(&current, count);
+				if (des >= alloc_size)
+					des = des % alloc_size;
+			} while (des < alloc_size && des + count - 1 >= alloc_size);
+		
 	#endif
 
 		assert(des < sample_capacity);
@@ -278,7 +283,11 @@ public:
 			} while (des < alloc_size && des + count - 1 >= alloc_size);
 		}
 	#else
-		des = __sync_fetch_and_add(&current, count);
+		do {
+				des = __sync_fetch_and_add(&current, count);
+				if (des >= alloc_size)
+					des = des % alloc_size;
+			} while (des < alloc_size && des + count - 1 >= alloc_size);
 	#endif
 
 		assert(des >= 0);
