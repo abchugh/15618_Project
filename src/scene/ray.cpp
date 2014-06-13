@@ -43,4 +43,10 @@ Ray Ray::transform(const Matrix4& mat)const
 
 	return Ray( project( mat*Vector4(e,1) ), project( nm*Vector4(d,1) ) );
 }
+
+Ray Ray::transform(const Matrix3& mat) const
+{
+	return Ray( mat*e, mat*d );
+}
+
 }

@@ -5,8 +5,6 @@
 #include "math/quaternion.hpp"
 #include "math/matrix.hpp"
 #include "math/camera.hpp"
-#include "scene/material.hpp"
-#include "scene/mesh.hpp"
 #include <string>
 #include <vector>
 
@@ -22,8 +20,14 @@ public:
     Ray(Vector3 e, Vector3 d);
 	/*Transform a ray with a matrix*/
 	Ray transform(const Matrix4& mat)const;
+	Ray transform(const Matrix3& mat) const;
     static Vector3 get_pixel_dir(real_t x, real_t y);
 	static void init(const Camera& camera);
+};
+
+struct VisibilityTest {
+	Ray r;
+	float t0, t1;
 };
 
 }

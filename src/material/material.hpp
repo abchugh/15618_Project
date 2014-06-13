@@ -1,35 +1,21 @@
 /**
- * @file material.hpp
+ * @file [0]
  * @brief Material class
  *
  * @author Eric Butler (edbutler)
  */
 
-#ifndef _462_SCENE_MATERIAL_HPP_
-#define _462_SCENE_MATERIAL_HPP_
+#ifndef _462_MATERIAL_MATERIAL_HPP_
+#define _462_MATERIAL_MATERIAL_HPP_
 
 #include "math/color.hpp"
 #include "math/vector.hpp"
 #include "application/opengl.hpp"
+#include "bxdf.hpp"
 #include <string>
 
 namespace _462 {
-
-struct MaterialProp
-{ 
-	// ambient color (ignored if refractive_index != 0)
-    Color3 ambient;
-
-    // diffuse color
-    Color3 diffuse;
-
-    // specular (reflective) color
-    Color3 specular;
-	
-	Color3 texColor;
-
-    real_t refractive_index;
-};
+class BSDF;
 
 class Material
 {
@@ -80,6 +66,14 @@ public:
 
     Color3 get_texture_pixel( real_t x, real_t y ) const;
 
+	Color3 get_texture_pixel_norm( real_t x, real_t y ) const;
+
+	Color3 get_texture_pixel_norm_inv( real_t x, real_t y ) const;
+
+	Color3 get_texture_pixel_norm_inv_gamma( real_t x, real_t y ) const;
+
+	Color3 get_filtered_texture_pixel(int x, int y) const;
+
     /// Creates opengl data for rendering
     bool create_gl_data();
 
@@ -89,6 +83,8 @@ public:
     /// clears out setting that depend on this material, such as the texture.
     /// leaves other settings unchanged for efficiency.
     void reset_gl_state() const;
+
+	_462::BSDF bsdf;
 
 private:
 
@@ -108,5 +104,5 @@ private:
 
 } /* _462 */
 
-#endif /* _462_SCENE_MATERIAL_HPP_ */
+#endif /* _462_MATERIAL_MATERIAL_HPP_ */
 

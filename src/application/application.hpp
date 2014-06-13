@@ -14,6 +14,31 @@
 namespace _462 {
 
 /**
+ * Struct of the program options.
+ */
+struct Options
+{
+    // whether to open a window or just render without one
+    bool open_window;
+    // not allocated, pointed it to something static
+    const char* input_filename;
+    // not allocated, pointed it to something static
+    const char* output_filename;
+    // window dimensions
+    int width, height;
+    int num_samples;
+    int num_glossy_reflection_samples;
+
+    int num_threads;
+    int pixel_width;
+    int packet_width_ray;
+
+	int sample_depth;
+	int max_depth;
+	int num_per_path;
+};
+
+/**
  * A windowed application.
  */
 class Application

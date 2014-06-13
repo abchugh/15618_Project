@@ -29,6 +29,10 @@ public:
     virtual bool hit(const Ray& r, real_t t0, real_t t1, hitRecord& h, bool fullRecord) const;
     virtual void hitPacket(const Packet& packet, int start, int end, real_t t0, real_t *t1Ptr, std::vector<hitRecord>& hs, bool fullRecord) const;
     virtual void InitGeometry();
+	virtual float get_area();
+	Vector3 sample(float r1, float r2, Vector3 *n_ptr);
+	virtual Vector3 sample(const Vector3 &p, float r1, float r2, float c, Vector3 *n_ptr);
+	virtual float pdf(const Vector3 &p, const Vector3 &wi);
 };
 
 } /* _462 */

@@ -1,0 +1,188 @@
+<scene>
+    <camera>
+        <fov v="1.0471975511"/>
+        <near_clip v=".01"/>
+        <far_clip v="100.0"/>
+        <position x="4.0" y="2.2" z="9.2"/>
+        <orientation a="0.0" x="0.0" y="1.0" z="0.0"/>
+    </camera>
+
+    <background_color r="0.0" g="0.0" b="0.0"/>
+
+    <refractive_index v="1.0"/>
+
+    <ambient_light r="0.1" g="0.1" b="0.1"/>
+
+    <d_point_light>
+        <position x="0.0" y="-1.0" z="0.0"/>
+        <color r="10" g="10" b="10"/>
+    </d_point_light>
+
+    <d_point_light>
+      <position x="4.0" y="0.0" z="0.0"/>
+      <color r="10" g="10" b="10"/>
+    </d_point_light>
+
+    <d_point_light>
+      <position x="8.0" y="2.0" z="0.0"/>
+      <color r="10" g="10" b="10"/>
+    </d_point_light>
+
+    <material name="white">
+        <refractive_index v="0.0"/>
+        <ambient r="1.0" g="1.0" b="1.0"/>
+        <diffuse r="1.0" g="1.0" b="1.0"/>
+    </material>
+
+    <vertex name="f1" material="white">
+        <position x="-2.0" y="-2.0" z="-2.0"/>
+        <normal x="0.0" y="1.0" z="0.0"/>
+        <tex_coord u="0.0" v="0.0"/>
+    </vertex>
+
+    <vertex name="f2" material="white">
+        <position x="-2.0" y="-2.0" z="2.0"/>
+        <normal x="0.0" y="1.0" z="0.0"/>
+        <tex_coord u="0.0" v="0.0"/>
+    </vertex>
+
+    <vertex name="f3" material="white">
+        <position x="2.0" y="-2.0" z="2.0"/>
+        <normal x="0.0" y="1.0" z="0.0"/>
+        <tex_coord u="0.0" v="0.0"/>
+    </vertex>
+
+    <vertex name="f4" material="white">
+        <position x="2.0" y="-2.0" z="-2.0"/>
+        <normal x="0.0" y="1.0" z="0.0"/>
+        <tex_coord u="0.0" v="0.0"/>
+    </vertex>
+
+  <vertex name="g1" material="white">
+    <position x="2.0" y="2.0" z="-2.0"/>
+    <normal x="-1.0" y="0.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="g2" material="white">
+    <position x="2.0" y="-2.0" z="-2.0"/>
+    <normal x="-1.0" y="0.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="g3" material="white">
+    <position x="2.0" y="-2.0" z="2.0"/>
+    <normal x="-1.0" y="0.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="g4" material="white">
+    <position x="2.0" y="2.0" z="2.0"/>
+    <normal x="-1.0" y="0.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="l1" material="white">
+    <position x="-0.5" y="-1.0" z="-0.5"/>
+    <normal x="0.0" y="-1.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="l2" material="white">
+    <position x="-0.5" y="-1.0" z="0.5"/>
+    <normal x="0.0" y="-1.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="l3" material="white">
+    <position x="0.5" y="-1.0" z="0.5"/>
+    <normal x="0.0" y="-1.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+
+  <vertex name="l4" material="white">
+    <position x="0.5" y="-1.0" z="-0.5"/>
+    <normal x="0.0" y="-1.0" z="0.0"/>
+    <tex_coord u="0.0" v="0.0"/>
+  </vertex>
+  
+    <triangle material="white">
+        <position x="0.0" y="0.0" z="0.0"/>
+        <vertex name="f1"/>
+        <vertex name="f2"/>
+        <vertex name="f3"/>
+    </triangle>
+
+    <triangle material="white">
+        <position x="0.0" y="0.0" z="0.0"/>
+        <vertex name="f3"/>
+        <vertex name="f4"/>
+        <vertex name="f1"/>
+    </triangle>
+
+  
+  
+  <triangle material="white">
+    <position x="4.0" y="0.0" z="0.0"/>
+    <vertex name="f1"/>
+    <vertex name="f2"/>
+    <vertex name="f3"/>
+  </triangle>
+
+  <triangle material="white">
+    <position x="4.0" y="0.0" z="0.0"/>
+    <vertex name="f3"/>
+    <vertex name="f4"/>
+    <vertex name="f1"/>
+  </triangle>
+
+  
+  
+  <triangle material="white">
+    <position x="8.0" y="0.0" z="0.0"/>
+    <vertex name="f1"/>
+    <vertex name="f2"/>
+    <vertex name="f3"/>
+  </triangle>
+
+  <triangle material="white">
+    <position x="8.0" y="0.0" z="0.0"/>
+    <vertex name="f3"/>
+    <vertex name="f4"/>
+    <vertex name="f1"/>
+  </triangle>
+
+  <triangle material="white">
+    <position x="4.0" y="0.0" z="0.0"/>
+    <vertex name="g1"/>
+    <vertex name="g2"/>
+    <vertex name="g3"/>
+  </triangle>
+
+  <triangle material="white">
+    <position x="4.0" y="0.0" z="0.0"/>
+    <vertex name="g3"/>
+    <vertex name="g4"/>
+    <vertex name="g1"/>
+  </triangle>
+
+  <area_light material="white">
+    <triangle material="white">
+      <position x="0.0" y="0.0" z="0.0"/>
+      <vertex name="g1"/>
+      <vertex name="g2"/>
+      <vertex name="g3"/>
+    </triangle>
+
+    <triangle material="white">
+      <position x="0.0" y="0.0" z="0.0"/>
+      <vertex name="g3"/>
+      <vertex name="g4"/>
+      <vertex name="g1"/>
+    </triangle>
+    
+    <color r="0.9" g="0.9" b="0.9"/>
+    <num_samples v="16"/>
+  </area_light>
+  
+</scene>

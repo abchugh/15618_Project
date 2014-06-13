@@ -3,8 +3,34 @@
 
 namespace _462 {
 
+<<<<<<< HEAD
 Sample *StratifiedSampler::getPacketSamples(uint32_t &x, uint32_t &y) {
     uint32_t des_packet = __sync_fetch_and_add(&current_packet, 1);
+=======
+void StratifiedSampler::roundSize(uint32_t n) {
+	uint32_t x = n, y = 1;
+
+	while ((x & 0x1) == 0 && 2 * y < x) {
+	    x >>= 1;
+	    y <<= 1;
+	}
+
+	pixel_num_x = x;
+	pixel_num_y = y;
+}
+
+Sample *StratifiedSampler::getPacketSamples(uint32_t &x, uint32_t &y, Random462 &rng) {
+    uint32_t des_packet;
+#ifdef _WINDOWS
+#pragma omp critical
+	{
+		des_packet = current_packet++;
+	}
+#else
+	des_packet = __sync_fetch_and_add(&current, 1);
+#endif
+
+>>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     if (des_packet >= wanted_packet_num)
 	return NULL;
 
@@ -34,6 +60,7 @@ Sample *StratifiedSampler::getPacketSamples(uint32_t &x, uint32_t &y) {
     */
 
     int count = 0;
+<<<<<<< HEAD
     for (int j = y_start; j < y_end; j++) {
 	for (int i = x_start; i < x_end; i++) {
 	    for (int k = 0; k < pixel_num_sample; k++) {
@@ -41,6 +68,20 @@ Sample *StratifiedSampler::getPacketSamples(uint32_t &x, uint32_t &y) {
 		result[count++].y = float(j)+ rng.random();
 	    }
 	}
+=======
+	float dx = 1.f / pixel_num_x;
+	float dy = 1.f / pixel_num_y;
+
+    for (uint32_t j = y_start; j < y_end; j++) {
+		for (uint32_t i = x_start; i < x_end; i++) {
+			for (uint32_t p_y = 0; p_y < pixel_num_y; p_y++) {
+				for (uint32_t p_x = 0; p_x < pixel_num_x; p_x++) {
+					result[count].x = float(i)+ (p_x + rng.random()) * dx;
+					result[count++].y = float(j)+ (p_y + rng.random()) * dy;
+				}
+			}
+		}
+>>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
     }
 
     /*

@@ -18,6 +18,18 @@ Matrix3::Matrix3( real_t (&r)[SIZE] )
     memcpy( m, r, sizeof r );
 }
 
+Matrix3::Matrix3( Matrix4 mat4 ) {
+	_m[0][0] = mat4._m[0][0];
+    _m[0][1] = mat4._m[0][1];
+    _m[0][2] = mat4._m[0][2];
+    _m[1][0] = mat4._m[1][0];
+    _m[1][1] = mat4._m[1][1];
+    _m[1][2] = mat4._m[1][2];
+    _m[2][0] = mat4._m[2][0];
+    _m[2][1] = mat4._m[2][1];
+    _m[2][2] = mat4._m[2][2];
+}
+
 Matrix3::Matrix3( real_t m00, real_t m10, real_t m20,
                   real_t m01, real_t m11, real_t m21,
                   real_t m02, real_t m12, real_t m22 )
@@ -31,6 +43,18 @@ Matrix3::Matrix3( real_t m00, real_t m10, real_t m20,
     _m[0][2] = m02;
     _m[1][2] = m12;
     _m[2][2] = m22;
+}
+
+Matrix3::Matrix3( Vector3 x, Vector3 y, Vector3 z ) {
+	_m[0][0] = x.x;
+	_m[1][0] = y.x;
+	_m[2][0] = z.x;
+	_m[0][1] = x.y;
+	_m[1][1] = y.y;
+	_m[2][1] = z.y;
+	_m[0][2] = x.z;
+	_m[1][2] = y.z;
+    _m[2][2] = z.z;
 }
 
 Matrix3 Matrix3::operator+( const Matrix3& rhs ) const

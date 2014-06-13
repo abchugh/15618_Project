@@ -5,7 +5,7 @@
  * @author Eric Butler (edbutler)
  */
 
-#include "scene/material.hpp"
+#include "material/material.hpp"
 #include "application/imageio.hpp"
 
 namespace _462 {

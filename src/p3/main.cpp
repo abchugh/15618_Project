@@ -12,6 +12,7 @@
 #include "application/scene_loader.hpp"
 #include "application/opengl.hpp"
 #include "scene/scene.hpp"
+#include "material/material.hpp"
 #include "p3/raytracer.hpp"
 
 #include <SDL.h>
@@ -56,26 +57,7 @@ static const size_t NUM_GL_LIGHTS = 8;
 // renders a scene using opengl
 static void render_scene( const Scene& scene );
 
-/**
- * Struct of the program options.
- */
-struct Options
-{
-    // whether to open a window or just render without one
-    bool open_window;
-    // not allocated, pointed it to something static
-    const char* input_filename;
-    // not allocated, pointed it to something static
-    const char* output_filename;
-    // window dimensions
-    int width, height;
-    int num_samples;
-    int num_glossy_reflection_samples;
 
-    int num_threads;
-    int pixel_width;
-    int packet_width_ray;
-};
 //QUICK AND DIRTY
 	int translations[] = {1,1,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 	int rotations[]	   = {0,0,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -184,9 +166,9 @@ bool RaytracerApplication::initialize()
         scene.ambient_light.to_array( arr );
         glLightModelfv( GL_LIGHT_MODEL_AMBIENT, arr );
 
-        const SphereLight* lights = scene.get_lights();
+        const SphereLight* lights = scene.get_simple_lights();
 
-        for ( size_t i = 0; i < NUM_GL_LIGHTS && i < scene.num_lights(); i++ )
+        for ( size_t i = 0; i < NUM_GL_LIGHTS && i < scene.num_simple_lights(); i++ )
 	{
             const SphereLight& light = lights[i];
             glEnable( LightConstants[i] );
@@ -380,8 +362,7 @@ void RaytracerApplication::toggle_raytracing( int width, int height )
         // initialize the raytracer (first make sure camera aspect is correct)
         scene.camera.aspect = real_t( width ) / real_t( height );
 
-		if (!raytracer.initialize(&scene, options.num_samples, options.num_glossy_reflection_samples,
-					  options.num_threads, options.pixel_width, options.packet_width_ray,
+		if (!raytracer.initialize(&scene, &options,
 					  width, height))
 	{
             std::cout << "Raytracer initialization failed.\n";
@@ -473,9 +454,9 @@ static void render_scene(const Scene& scene)
 
     glLightModeli( GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE );
 
-    const SphereLight* lights = scene.get_lights();
+    const SphereLight* lights = scene.get_simple_lights();
 
-    for ( size_t i = 0; i < NUM_GL_LIGHTS && i < scene.num_lights(); i++ )
+    for ( size_t i = 0; i < NUM_GL_LIGHTS && i < scene.num_simple_lights(); i++ )
     {
         const SphereLight& light = lights[i];
         glEnable( LightConstants[i] );
@@ -575,11 +556,14 @@ static bool parse_args( Options* opt, int argc, char* argv[] )
 	opt->open_window = true;
 	opt->width = DEFAULT_WIDTH;
 	opt->height = DEFAULT_HEIGHT;
-	opt->num_samples = 5;
+	opt->num_samples = 4;
 	opt->num_glossy_reflection_samples = 0;
 	opt->num_threads = 12;
 	opt->pixel_width = 32;
 	opt->packet_width_ray = 16;
+	opt->sample_depth = 3;
+	opt->max_depth = 5;
+	opt->num_per_path = 1;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -623,6 +607,18 @@ static bool parse_args( Options* opt, int argc, char* argv[] )
 		case 'p':
 		    if (i < argc - 1)
 			    opt->packet_width_ray = atoi(argv[++i]);
+		    break;
+		case 's':
+		    if (i < argc - 1)
+				opt->sample_depth = atoi(argv[++i]);
+		    break;
+		case 'm':
+		    if (i < argc - 1)
+				opt->max_depth = atoi(argv[++i]);
+		    break;
+		case 'a':
+		    if (i < argc - 1)
+				opt->num_per_path = atoi(argv[++i]);
 		    break;
 		}
 	}

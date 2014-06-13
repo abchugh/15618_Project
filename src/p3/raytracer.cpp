@@ -8,8 +8,14 @@
 * @bug Unimplemented
 */
 
+#include "application/application.hpp"
 #include "raytracer.hpp"
 #include "scene/scene.hpp"
+#include "material/material.hpp"
+#include "integrator/direct.hpp"
+#include "integrator/whitted.hpp"
+#include "integrator/path.hpp"
+#include "light/infinite.hpp"
 
 #include <SDL_timer.h>
 #include <iostream>
@@ -22,6 +28,7 @@
 using namespace std;
 
 namespace _462 {
+	
     extern time_t ta[MAX_THREADS], tb[MAX_THREADS],ts[MAX_THREADS], tt[MAX_THREADS], tu[MAX_THREADS];
     time_t tc[MAX_THREADS],td[MAX_THREADS],te[MAX_THREADS],tf[MAX_THREADS];
     static time_t sum(time_t arr[])
@@ -56,31 +63,30 @@ namespace _462 {
         return n;
     }
 
+    static inline void roundPacket(uint32_t p_r_width, uint32_t num_sample,
+		     uint32_t &p_p_x, uint32_t &p_p_y) {
+	uint32_t num_pixel = p_r_width * p_r_width / num_sample;
+	uint32_t x = num_pixel, y = 1;
+
+	while ((x & 0x1) == 0 && 2 * y < x) {
+	    x >>= 1;
+	    y <<= 1;
+	}
+
+	p_p_x = x;
+	p_p_y = y;
+    }
+
     Raytracer::Raytracer()
         : scene(0), width(0), height(0) { }
 
-    // random real_t in [0, 1)
-	static unsigned long _xR=123456789, _yR =362436069, _zR=521288629;
+    Raytracer::~Raytracer() {
+	delete sampler_ptr;
+	delete film_ptr;
 
-	static unsigned long xorshf96(void) {          //period 2^96-1
-	unsigned long t;
-		_xR ^= _xR << 16;
-		_xR ^= _xR >> 5;
-		_xR ^= _xR << 1;
-
-	   t = _xR;
-	   _xR = _yR;
-	   _yR = _zR;
-	   _zR = t ^ _xR ^ _yR;
-
-	  return _zR;
-	}
-    static inline real_t random()
-    {
-        return (real_t) xorshf96()/(float)(~0UL);
+	sampler_ptr = NULL;
+	film_ptr = NULL;
     }
-
-    Raytracer::~Raytracer() { }
 
     /**
     * Initializes the raytracer for the given scene. Overrides any previous
@@ -91,8 +97,7 @@ namespace _462 {
     * @return true on success, false on error. The raytrace will abort if
     *  false is returned.
     */
-    bool Raytracer::initialize(Scene* scene, int num_samples, int num_glossy_reflection_samples,
-        int num_threads, int pixel_width, int packet_width_ray,
+    bool Raytracer::initialize(Scene* scene, Options *opt_ptr,
         size_t width, size_t height)
     {
         /*
@@ -103,10 +108,9 @@ namespace _462 {
         omp_set_num_threads(MAX_THREADS);
 #endif
         this->scene = scene;
-        this->num_samples = num_samples;
-        scene->SetGlossyReflectionSamples(num_glossy_reflection_samples);
-        this->width = width;
-        this->height = height;
+        this->num_samples = opt_ptr->num_samples;
+		this->opt_ptr = opt_ptr;
+        scene->SetGlossyReflectionSamples(opt_ptr->num_glossy_reflection_samples);
 
         current_row = 0;
 
@@ -118,10 +122,47 @@ namespace _462 {
         // Every openmp thread grasps a pixel_width x pixel_width
         // grid. Every packet contains 
         // packet_width_ray x packet_width_ray rays.
-        this->pixel_width = pixel_width;
-        this->packet_width_ray = packet_width_ray;
+        this->pixel_width = opt_ptr->pixel_width;
+        this->packet_width_ray = opt_ptr->packet_width_ray;
 
-        this->num_threads = num_threads;
+        this->num_threads = opt_ptr->num_threads;
+
+	roundPacket(this->packet_width_ray, this->num_samples, this->packet_width_x,
+		    this->packet_width_y);
+
+	//Filter *filter_ptr = new GaussianFilter(2.f, 2.f, 2.f);
+	Filter *filter_ptr = new MitchellFilter(2.f, 2.f, 1.f / 3, 1.f / 3);
+	//Filter *filter_ptr = new SincFilter(4.f, 4.f, 3.f);
+	//Filter *filter_ptr = new BoxFilter(0.5f, 0.5f);
+
+	uint32_t filter_x = (uint32_t)(filter_ptr->width_x + 0.5f);
+	uint32_t filter_y = (uint32_t)(filter_ptr->width_y + 0.5f);
+
+	uint32_t padding_x = filter_x / this->packet_width_x * 
+	    this->packet_width_x + 
+	    (filter_x % this->packet_width_x > 0) * this->packet_width_x;
+	uint32_t padding_y = filter_y / this->packet_width_y * 
+	    this->packet_width_y + 
+	    (filter_y % this->packet_width_y > 0) * this->packet_width_y;
+
+	//padding_x = padding_y = 16;
+
+    this->width = width + 2 * padding_x;
+	this->height = height + 2 * padding_y;
+
+	printf("w: %d; h: %d\n", width, height);
+	printf("ray: %d; #sam: %d; x: %d; y: %d\n", this->packet_width_ray,
+	       this->num_samples, this->packet_width_x, this->packet_width_y);
+
+	sampler_ptr = new HaltonSampler(this->width, this->height, this->packet_width_x,
+					    this->packet_width_y, this->num_samples);
+	
+	
+	film_ptr = new Film(this->width,
+			    this->height,
+			    padding_x, width + padding_x,
+			    padding_y, height + padding_y);
+	film_ptr->setFilter(filter_ptr);
 
         return true;
     }
@@ -155,8 +196,8 @@ namespace _462 {
         {
             // pick a point within the pixel boundaries to fire our
             // ray through.
-            real_t i = real_t(2)*(real_t(x)+random())*dx - real_t(1);
-            real_t j = real_t(2)*(real_t(y)+random())*dy - real_t(1);
+            real_t i = real_t(2)*(real_t(x)+ rng.random())*dx - real_t(1);
+            real_t j = real_t(2)*(real_t(y)+ rng.random())*dy - real_t(1);
 
             Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(i, j));
             std::vector<real_t> refractiveStack;
@@ -233,8 +274,8 @@ namespace _462 {
 
         size_t iterations = std::min(packet.size, num_samples);
 
-        for (size_t j = 0; j < packet_width_pixel; j++) {
-            for (size_t i = 0; i < packet_width_pixel; i++) {
+        for (size_t j = 0; j < packet_width_y; j++) {
+            for (size_t i = 0; i < packet_width_x; i++) {
                 size_t cur_x = x + i;
                 size_t cur_y = y + j;
 
@@ -244,8 +285,8 @@ namespace _462 {
                 for (size_t iter = 0; iter < iterations; iter++) {
                     // pick a point within the pixel boundaries to fire our
                     // ray through.
-                    real_t rand_i = real_t(2)*(real_t(cur_x)+random())*dx - real_t(1);
-                    real_t rand_j = real_t(2)*(real_t(cur_y)+random())*dy - real_t(1);
+                    real_t rand_i = real_t(2)*(real_t(cur_x)+ rng.random())*dx - real_t(1);
+                    real_t rand_j = real_t(2)*(real_t(cur_y)+ rng.random())*dy - real_t(1);
 
                     Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(rand_i, rand_j));
 
@@ -262,9 +303,9 @@ namespace _462 {
             }
         }
         x_min = x;
-        x_max = x + packet_width_pixel;
+        x_max = x + packet_width_x;
         y_min = y;
-        y_max = y + packet_width_pixel;
+        y_max = y + packet_width_y;
 
         build_frustum(packet.frustum, x_min, x_max, y_min, y_max);
 
@@ -301,8 +342,7 @@ namespace _462 {
                             build_packet(p_x, p_y, width, height, packet);
 
                             // Get color
-                            
-                            std::vector< std::vector<real_t> > refractiveStack;
+			    std::vector< std::vector<real_t> > refractiveStack;
                             for(int i=0;i<packet.size;i++)
                             {
                                 std::vector<real_t> rstack;
@@ -323,6 +363,171 @@ namespace _462 {
             }
     }
 
+    void Raytracer::build_packet_sampler(size_t width, size_t height, Packet& packet,
+					 Sample *&samples,
+					 size_t &p_x, size_t &p_y, Random462 &rng) {
+        size_t x_min;
+        size_t x_max;
+        size_t y_min;
+        size_t y_max;
+
+		uint32_t temp_x, temp_y;
+		size_t count = 0;
+
+		float dx = float(1)/width;
+		float dy = float(1)/height;
+
+		samples = sampler_ptr->getPacketSamples(temp_x, temp_y, rng);
+
+		p_x = temp_x;
+		p_y = temp_y;
+
+        for (size_t j = 0; j < packet_width_y; j++) {
+            for (size_t i = 0; i < packet_width_x; i++) {
+
+                if (p_x + i >= width || p_y + j >= height)
+                    continue;
+
+                for (size_t iter = 0; iter < num_samples; iter++) {
+                    // pick a point within the pixel boundaries to fire our
+                    // ray through.
+					float *pos_samples = (float*)samples + (j * packet_width_x * num_samples + 
+						i * num_samples + iter) * sampler_ptr->get_sample_size();
+					float rand_i = 2.f * pos_samples[0] * dx - 1.f;
+					float rand_j = 2.f * pos_samples[1] * dy - 1.f;
+
+                    Ray r = Ray(scene->camera.get_position(), Ray::get_pixel_dir(rand_i, rand_j));
+
+                    // TODO: a better way?
+                    packet.e_x[count] = r.e[0];
+                    packet.e_y[count] = r.e[1];
+                    packet.e_z[count] = r.e[2];
+                    packet.d_x[count] = r.d[0];
+                    packet.d_y[count] = r.d[1];
+                    packet.d_z[count] = r.d[2];
+
+                    packet.rays[count++] = r;
+                }
+            }
+        }
+        x_min = p_x;
+        x_max = p_x + packet_width_x;
+        y_min = p_y;
+        y_max = p_y + packet_width_y;
+
+        build_frustum(packet.frustum, x_min, x_max, y_min, y_max);
+
+        packet.size = count;
+    }
+
+	void Raytracer::trace_packet_integrator(SurfaceIntegrator *integrator_ptr, size_t width, size_t height) {
+		uint32_t wanted_packet_num = (width + packet_width_x - 1) / packet_width_x * 
+	    ((height + packet_width_y - 1) / packet_width_y);
+		// TODO : rng array for multi-threading
+		Random462 rng;
+
+		time_t prev_time = -1;
+		time_t this_time;
+
+//#pragma omp parallel for num_threads(num_threads)
+		for (int i = 0; i < wanted_packet_num; i++) {
+			int tid = omp_get_thread_num();
+
+			if (tid == 0) {
+				this_time = SDL_GetTicks();
+				if (this_time - prev_time > 30000) {
+					if (prev_time < 0)
+						printf("Rendering: ");
+					prev_time = this_time;
+					printf("%f\%\n", (float)i / wanted_packet_num * 100);
+				}
+			}
+
+		   // All numbers should have been rounded
+		   size_t p_x;
+		   size_t p_y;
+
+		   // Clamped along the boundary.
+		   Packet packet(packet_width_ray * packet_width_ray);
+		   Sample *samples;
+
+		   build_packet_sampler(width, height, packet, samples, p_x, p_y, rng);
+
+		   vector<hitRecord> hs(packet.size);
+		   scene->hit(packet, 0.f, BIG_NUMBER, hs, true);
+		   
+		   for (size_t y = 0; y < packet_width_y; y++) {
+			   for (size_t x = 0; x < packet_width_x; x++) {
+
+			   if ((p_x + x) >= width || (p_y + y) >= height)
+				   continue;
+
+			   for (size_t count = 0; count < num_samples; count++) {
+					   uint32_t offset = y * packet_width_x * num_samples +
+					   x * num_samples + count;
+					   hs[offset].depth = 0;
+					   float* start = (float*)samples + offset * sampler_ptr->get_sample_size();
+
+					   Color3 color = integrator_ptr->li(scene, packet.rays[offset], hs[offset], (Sample*)start, rng);
+					   film_ptr->addSample(*(Sample*)start, color);
+				   }
+			   }
+		   }
+	    
+		}	
+	}
+
+    void Raytracer::trace_packet(size_t width, size_t height) {
+	uint32_t wanted_packet_num = (width + packet_width_x - 1) / packet_width_x * 
+	    ((height + packet_width_y - 1) / packet_width_y);
+	Random462 rng;
+
+#pragma omp parallel for num_threads(num_threads)
+	for (int i = 0; i < wanted_packet_num; i++) {
+           Color3* packet_color = new Color3[packet_width_x * packet_width_y * num_samples];
+
+            // All numbers should have been rounded
+	   size_t p_x;
+	   size_t p_y;
+
+	   // Clamped along the boundary.
+	   Packet packet(packet_width_ray * packet_width_ray);
+	   Sample *samples;
+
+	   build_packet_sampler(width, height, packet, samples, p_x, p_y, rng);
+
+	   std::vector< std::vector<real_t> > refractiveStack;
+	   for(int i=0;i<packet.size;i++)
+	       {
+		   std::vector<real_t> rstack;
+		   rstack.push_back(scene->refractive_index);
+		   refractiveStack.push_back(rstack);
+	       }
+
+	   scene->getColors(packet, refractiveStack, packet_color);
+
+	   for (size_t y = 0; y < packet_width_y; y++) {
+	       for (size_t x = 0; x < packet_width_x; x++) {
+
+		   if ((p_x + x) >= width || (p_y + y) >= height)
+		       continue;
+
+		   for (size_t count = 0; count < num_samples; count++) {
+		       uint32_t offset = y * packet_width_x * num_samples +
+			   x * num_samples + count;
+
+		       film_ptr->addSample(samples[offset], packet_color[offset]);
+		   }
+	       }
+	   }
+
+	    // Get color here. (func in scene)
+	    delete[] packet_color;
+	    
+	}	
+    
+    }
+
     void Raytracer::trace_large_packet(unsigned char* buffer, size_t width, size_t height) {
         size_t work_num_x = (width + pixel_width - 1) / pixel_width;
         size_t work_num_y = (height + pixel_width - 1) / pixel_width;
@@ -337,16 +542,16 @@ namespace _462 {
 
 			
            // Get color here. (func in scene)
-           Color3* packet_color = new Color3[packet_width_pixel * packet_width_pixel * num_samples];
+           Color3* packet_color = new Color3[packet_width_x * packet_width_y * num_samples];
 
             // All numbers should have been rounded
-            for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_pixel; cur_packet_y++) {
-                for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_pixel; cur_packet_x++) {
+            for (size_t cur_packet_y = 0; cur_packet_y < pixel_width / packet_width_y; cur_packet_y++) {
+                for (size_t cur_packet_x = 0; cur_packet_x < pixel_width / packet_width_x; cur_packet_x++) {
 
                     time_t tt = SDL_GetTicks();
 
-                    size_t p_x = cur_packet_x * packet_width_pixel + cur_work_x * pixel_width;
-                    size_t p_y = cur_packet_y * packet_width_pixel + cur_work_y * pixel_width;
+                    size_t p_x = cur_packet_x * packet_width_x + cur_work_x * pixel_width;
+                    size_t p_y = cur_packet_y * packet_width_y + cur_work_y * pixel_width;
 
                     // Clamped along the boundary.
                     Packet packet(packet_width_ray * packet_width_ray);
@@ -369,15 +574,15 @@ namespace _462 {
                     te[omp_get_thread_num()] += SDL_GetTicks() -tt;
 
 					
-                    for (size_t y = 0; y < packet_width_pixel; y++) {
-                        for (size_t x = 0; x < packet_width_pixel; x++) {
+                    for (size_t y = 0; y < packet_width_y; y++) {
+                        for (size_t x = 0; x < packet_width_x; x++) {
 
                             Color3 cur_color = Color3::Black();
                             if ((p_x + x) >= width || (p_y + y) >= height)
                                 continue;
 
                             for (size_t count = 0; count < num_samples; count++) 
-                                cur_color += packet_color[y * packet_width_pixel * num_samples +
+                                cur_color += packet_color[y * packet_width_x * num_samples +
                                 x * num_samples + count];
 
                             cur_color = cur_color*(real_t(1)/num_samples);
@@ -409,7 +614,6 @@ namespace _462 {
         time_t end = SDL_GetTicks();
         printf("ta tb... = P=%d/%d S=%d/%d Pack=%d Data=%d stack=%d %d %d\n", sum(ta), sum(te)-sum(td), sum(tb), sum(ts), sum(tc), sum(tf) - sum(te), sum(td)-sum(tc), sum(tt), sum(tu));//sum(td)-sum(tc) = tb), sum(te)-sum(td) negligible
     }
-
 
     /**
     * Raytraces some portion of the scene. Should raytrace for about
@@ -481,37 +685,61 @@ namespace _462 {
             }
         }
         else {
-            if (num_samples >= packet_width_ray * packet_width_ray) {
-                packet_width_pixel = 1;
-                printf("pp: %ld; #s: %ld; wp: %ld\n", packet_width_pixel, num_samples, pixel_width);
+			printf("trace: %d, %d\n", width, height);
 
-                trace_small_packet(buffer, width, height);
-                is_done = true;
-            }
-            else {
-                // Recompute the unit amount of work
-                // So a packet can perfectly cover a square area of pixels.
-                size_t num_p = packet_width_ray * packet_width_ray / num_samples;
-                packet_width_pixel = (uint32_t)(std::floor(std::sqrt(num_p)));
+			float test_1d[] = {1.f, 1.f, 1.f, 1.f};
+			Distribution1D dis_1d(test_1d, 4);
+			Distribution2D dis_2d(test_1d, 2, 2);
+			
+			Matrix3 trans;
+			Vector3 z(0.f, 1.f, 0.f);
+			Vector3 x, y;
+			coordinate_system(z, &x, &y);
+			Material *sky_ptr = NULL;
+			for (uint32_t i = 0; i < scene->num_materials(); i++) {
+				if (!scene->get_materials()[i]->texture_filename.empty())
+					sky_ptr = scene->get_materials()[i];
+			}
+			InfiniteAreaLight inf_light(Matrix3(x, y, z), sky_ptr);
+			scene->add_light((Light*)&inf_light);
 
-                // Given packet_width_ray is a power of 2, rounding the pixel width to next
-                // power of 2 would make this value divisible (only when it's not a power of 2)
-                if (packet_width_pixel & (packet_width_pixel - 1))
-                    packet_width_pixel = nextPow2(packet_width_pixel);
-                num_samples = packet_width_ray * packet_width_ray / (packet_width_pixel * packet_width_pixel);
-                pixel_width /= packet_width_pixel;
-                pixel_width *= packet_width_pixel;
+			//WhittedIntegrator whitted(4);
+			//whitted.initialize_sampler(scene, sampler_ptr);
+			DirectLightingIntegrator dir_int(scene, SAMPLE_ALL, 4);
+			dir_int.initialize_sampler(scene, sampler_ptr);
+			//PathIntegrator path_int(scene, opt_ptr->sample_depth, opt_ptr->max_depth, opt_ptr->num_per_path);
+			//path_int.initialize_sampler(scene, sampler_ptr);
+			trace_packet_integrator(&dir_int, width, height);
+			//trace_packet(width, height);
+			is_done = true;
 
-                printf("#p: %d; pp: %d; pr: %d; #s: %d; wp: %d\n", num_p, packet_width_pixel, 
-		       packet_width_ray, num_samples, pixel_width);
+			film_ptr->output(buffer);
 
-                trace_large_packet(buffer, width, height);
-                is_done = true;
-            }
+			//	    exit(0);
+			/*
+
+				if (num_samples >= packet_width_ray * packet_width_ray) {
+					packet_width_x = packet_width_y = 1;
+					printf("pp: %ld; #s: %ld; wp: %ld\n", packet_width_x, num_samples, pixel_width);
+
+					trace_small_packet(buffer, width, height);
+					is_done = true;
+				}
+				else {
+					// Recompute the unit amount of work
+					// So a packet can perfectly cover a square area of pixels.
+			roundPacket(packet_width_ray, num_samples, packet_width_x,
+					packet_width_y);
+					printf("pp: %d; pr: %d; #s: %d; wp: %d\n", packet_width_x, 
+				   packet_width_ray, num_samples, pixel_width);
+
+					trace_large_packet(buffer, width, height);
+					is_done = true;
+			}*/
 
         }
-
         time_t endTime = SDL_GetTicks();
+
         if (is_done) printf("Done raytracing! %ld\n", endTime-startTime);
 
         return is_done;

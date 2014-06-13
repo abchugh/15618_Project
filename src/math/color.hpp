@@ -59,7 +59,7 @@ public:
     /**
      * Default constructor. Leaves values unitialized.
      */
-    Color3() {}
+    Color3() : r(0.), g(0.), b(0.) {}
 
     /**
      * Create a color with the given values.
@@ -125,7 +125,9 @@ public:
     }
 
     bool operator==( const Color3& rhs ) const {
-        return r == rhs.r && g == rhs.g && b == rhs.b;
+        return ((r - rhs.r) < 1e-4) &&
+			((g - rhs.g) < 1e-4) &&
+			((b - rhs.b) < 1e-4);
     }
 
     bool operator!=( const Color3& rhs ) const {
@@ -150,10 +152,17 @@ public:
         return ( &r )[i];
     }
 
+	real_t relative_luminance() {
+		// Y = 0.2126 R + 0.7152 G + 0.0722 B
+		return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+	}
+
     /**
      * Converts a color to 4-byte RGBA with alpha 1.0.
      */
     void to_array( unsigned char arr[4] ) const;
+
+	void to_array_gamma( unsigned char arr[4], float a, float gamma ) const;
 
     /**
      * Puts color in an array of 3 floats.

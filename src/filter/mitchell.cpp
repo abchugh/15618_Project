@@ -18,6 +18,7 @@ float mitchell1D(float v, float B, float C) {
 
 
 float MitchellFilter::evaluate(float x, float y) {
+<<<<<<< HEAD
     float shift_x = (x - width_x) / (2 * width_x);
     float shift_y = (y - width_y) / (2 * width_y);
     float g_x = mitchell1D(shift_x, b, c);
@@ -25,6 +26,14 @@ float MitchellFilter::evaluate(float x, float y) {
 
     printf("%f - %f\n", width_x, width_y);
     printf("%f, %f >>> %f, %f: %f, %f\n", x, y, shift_x, shift_y, g_x, g_y);
+=======
+    float shift_x = (x - width_x) / (width_x);
+    float shift_y = (y - width_y) / (width_y);
+    float g_x = mitchell1D(shift_x, b, c);
+    float g_y = mitchell1D(shift_y, b, c);
+
+    //printf("%f, %f >>> %f, %f: %f, %f\n", x, y, shift_x, shift_y, g_x, g_y);
+>>>>>>> 9612b61bec1ef47036192ed0a454ddc67da31fc3
 
     return g_x * g_y;
 }

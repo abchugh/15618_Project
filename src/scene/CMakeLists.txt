@@ -4,7 +4,7 @@ if(UNIX)
 endif (UNIX)
 
 if(WIN32)
-	set(ISPC_PATH C:/Users/Abhi/Downloads/ispc-v1.6.0-windows/ispc.exe)
+	set(ISPC_PATH W:/Downloads/ispc-v1.7.0-windows/ispc.exe)
 	set(ISPC_FLAGS -O2 --target=sse4-x2 --arch=x86)
 endif (WIN32)
 
@@ -14,7 +14,7 @@ string(REPLACE ".ispc" "_ispc.h" ISPC_PARTITION_HEADER ${ISPC_PARTITION_FILE})
 add_custom_command(
 	OUTPUT ${ISPC_PARTITION_OBJ} ${ISPC_PARTITION_HEADER}
 	MAIN_DEPENDENCY ${ISPC_PARTITION_FILE}
-	COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_PARTITION_FILE} -o ${ISPC_PARTITION_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_PARTITION_HEADER}
+	COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_PARTITION_FILE} -o ${CMAKE_CURRENT_LIST_DIR}/${ISPC_PARTITION_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_PARTITION_HEADER}
 )
 
 set(ISPC_HIT_FILE "hit.ispc")
@@ -23,10 +23,10 @@ string(REPLACE ".ispc" "_ispc.h" ISPC_HIT_HEADER ${ISPC_HIT_FILE})
 add_custom_command(
 	OUTPUT ${ISPC_HIT_OBJ} ${ISPC_HIT_HEADER}
 	MAIN_DEPENDENCY ${ISPC_HIT_FILE}
-	COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HIT_FILE} -o ${ISPC_HIT_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HIT_HEADER}
+	COMMAND ${ISPC_PATH} ${ISPC_FLAGS} ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HIT_FILE} -o ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HIT_OBJ} -h ${CMAKE_CURRENT_LIST_DIR}/${ISPC_HIT_HEADER}
 )
 
-add_library(scene material.cpp mesh.cpp model.cpp scene.cpp sphere.cpp
+add_library(scene mesh.cpp model.cpp scene.cpp sphere.cpp
             triangle.cpp ray.cpp bvh.cpp bvhISPC.cpp bvhNonISPC.cpp BoundingBox.cpp ${ISPC_PARTITION_OBJ} 
 	    ${ISPC_HIT_OBJ} ${ISPC_PARTITION_HEADER}   ${ISPC_HIT_HEADER} )
 
